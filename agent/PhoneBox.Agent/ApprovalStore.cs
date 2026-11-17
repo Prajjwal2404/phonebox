@@ -44,8 +44,9 @@ public sealed class ApprovalStore(PushStore events, ILogger<ApprovalStore> log)
         log.LogInformation("approval {Id}: {Tool} in {Project} sent to the phone", a.Id, a.Tool, a.Project);
         try
         {
-            // exactly the time left: Decide refuses an answer from the expiry on, so waiting longer only delays the terminal
-            var timeout = TimeSpan.FromMilliseconds(Math.Max(0, a.ExpiresAt - _clock.GetUtcNow().ToUnixTimeMilliseconds()));
+            var timeout = a.ExpiresAt <= 0
+                ? Timeout.InfiniteTimeSpan
+                : TimeSpan.FromMilliseconds(Math.Max(0, a.ExpiresAt - _clock.GetUtcNow().ToUnixTimeMilliseconds()));
             // The hook process goes away when the user answers in the terminal; that cancels the request here.
             await Task.WhenAny(pending.Decision.Task, Task.Delay(timeout, aborted));
             // The decision task is the one outcome: a timeout or cancel closes it with null, so a Decide that loses
@@ -64,7 +65,7 @@ public sealed class ApprovalStore(PushStore events, ILogger<ApprovalStore> log)
     public bool Decide(string id, string decision)
     {
         if (decision is not ("allow" or "deny" or "skip") || !_pending.TryGetValue(id, out var p)) return false;
-        if (p.Approval.ExpiresAt <= _clock.GetUtcNow().ToUnixTimeMilliseconds()) return false;
+        if (p.Approval.ExpiresAt > 0 && p.Approval.ExpiresAt <= _clock.GetUtcNow().ToUnixTimeMilliseconds()) return false;
         // accepted only if it wins against the timeout and the cancel (see AskAsync), and only then logged as such
         if (!p.Decision.TrySetResult(decision)) return false;
         log.LogInformation("approval {Id}: {Decision} from the phone", id, decision);

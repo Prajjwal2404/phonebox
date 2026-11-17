@@ -473,7 +473,43 @@ W.quotas = {
         const card = h('div', 'q-card' + (p.limits.length >= 4 ? ' q-card-compact' : ''));
         card.style.setProperty('--q', st.color);
         card.style.flex = needsPaging && ps === 2 ? '1 1 0' : String(Math.max(1, p.limits.length) + 0.3);
-        card.appendChild(h('div', 'q-head', h('span', 'q-logo', st.logo), h('span', 'q-name', p.name), h('span', 'q-plan', p.plan),
+        const isPhoneOn = p.id === 'antigravity'
+          ? (cfg.antigravity?.phoneApprovals !== false)
+          : p.id === 'claude'
+            ? (cfg.claude?.phoneApprovals !== false)
+            : (cfg.antigravity?.phoneApprovals !== false || cfg.claude?.phoneApprovals !== false);
+
+        const toggleBtn = h('button', 'q-plan' + (isPhoneOn ? '' : ' pc-only'), isPhoneOn ? '🔔 Alerts' : '🔕 Muted');
+        toggleBtn.type = 'button';
+        toggleBtn.title = isPhoneOn ? `${p.name} alerts enabled. Tap to mute.` : `${p.name} alerts muted. Tap to enable.`;
+        toggleBtn.onclick = async (e) => {
+          e.stopPropagation();
+          haptic();
+          const next = !isPhoneOn;
+          if (p.id === 'antigravity') {
+            cfg.antigravity = cfg.antigravity || {};
+            cfg.antigravity.phoneApprovals = next;
+          } else if (p.id === 'claude') {
+            cfg.claude = cfg.claude || {};
+            cfg.claude.phoneApprovals = next;
+          } else {
+            cfg.antigravity = cfg.antigravity || {};
+            cfg.claude = cfg.claude || {};
+            cfg.antigravity.phoneApprovals = next;
+            cfg.claude.phoneApprovals = next;
+          }
+          store.set('cfg', cfg);
+          render();
+          const provKey = (p.id === 'antigravity' || p.id === 'claude') ? p.id : 'all';
+          try {
+            await api(`/ai/approvals/toggle?provider=${encodeURIComponent(provKey)}&phone=${next}`, 'POST', 3000);
+            toast(next ? `${p.name} alerts enabled` : `${p.name} alerts muted`, 'ok');
+          } catch (_) {
+            toast('Updated on phone; restart/rebuild PC agent to sync', 'warn');
+          }
+        };
+
+        card.appendChild(h('div', 'q-head', h('span', 'q-logo', st.logo), h('span', 'q-name', p.name), toggleBtn,
           p.updatedAt ? h('span', 'q-upd', fmtDur(Date.now() - p.updatedAt) + ' ago') : null));
         const compact = p.limits.length >= 4;
         const rings = h('div', 'q-rings' + (compact ? ' q-rings-grid' : ''));
@@ -664,7 +700,11 @@ W.github = {
         const nRev = Math.min(g.reviewRequests.length || 1, Math.max(1, Math.floor(rows / 2)));
         rev.replaceChildren(...(g.reviewRequests.length ? g.reviewRequests.slice(0, nRev).map((p) => prRow(p, false)) : [h('div', 'gh-pr', t('w.noReviews'))]));
         mine.replaceChildren(...(g.myPrs.length ? g.myPrs.slice(0, Math.max(1, rows - nRev)).map((p) => prRow(p, true)) : [h('div', 'gh-pr', t('w.noPrs'))]));
-        err.textContent = g.error ? 'GitHub: ' + g.error : '';
+        err.textContent = g.error
+          ? (g.error.includes('cannot find the file specified')
+              ? 'GitHub CLI (gh) not installed. Run "winget install GitHub.cli" on PC.'
+              : 'GitHub: ' + g.error)
+          : '';
       },
     };
   },

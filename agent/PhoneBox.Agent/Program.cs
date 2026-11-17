@@ -682,6 +682,66 @@ app.MapGet("/api/claude/hook", () => Results.Json(new { installed = ClaudeHook.I
 app.MapPost("/api/claude/hook", (ConfigStore cfg) => ClaudeHook.Configure(true, Port, cfg.Get().Claude.TimeoutSec) is { } err ? Results.BadRequest(new { error = err }) : Results.Ok());
 app.MapDelete("/api/claude/hook", (ConfigStore cfg) => ClaudeHook.Configure(false, Port, cfg.Get().Claude.TimeoutSec) is { } err ? Results.BadRequest(new { error = err }) : Results.Ok());
 
+// Antigravity prompt notification (PreToolUse): emits alert on phone, never blocks PC prompt.
+app.MapPost(AntigravityHook.PromptEndpoint, async (HttpRequest req, ConfigStore cfg, PushStore push) =>
+{
+    JsonElement input;
+    try { input = (await JsonDocument.ParseAsync(req.Body)).RootElement.Clone(); }
+    catch (JsonException) { return Results.Json(new { decision = "allow" }); }
+    return Results.Json(AntigravityHook.HandlePrompt(input, cfg, push));
+});
+
+// Antigravity task finished notification (Stop hook): emits alert on phone when task finishes.
+app.MapPost(AntigravityHook.StopEndpoint, async (HttpRequest req, ConfigStore cfg, PushStore push) =>
+{
+    JsonElement input;
+    try { input = (await JsonDocument.ParseAsync(req.Body)).RootElement.Clone(); }
+    catch (JsonException) { return Results.Json(new { }); }
+    return Results.Json(AntigravityHook.HandleStop(input, cfg, push));
+});
+app.MapGet("/api/antigravity/hook", () => Results.Json(new { installed = AntigravityHook.Installed(), path = AntigravityHook.SettingsPath }));
+app.MapPost("/api/antigravity/hook", (ConfigStore cfg) => AntigravityHook.Configure(true, Port, cfg.Get().Antigravity.TimeoutSec) is { } err ? Results.BadRequest(new { error = err }) : Results.Ok());
+app.MapDelete("/api/antigravity/hook", (ConfigStore cfg) => AntigravityHook.Configure(false, Port, cfg.Get().Antigravity.TimeoutSec) is { } err ? Results.BadRequest(new { error = err }) : Results.Ok());
+
+// Toggle receiving AI approvals/choices on phone vs PC only.
+app.MapMethods("/api/ai/approvals/toggle", ["GET", "POST"], async (HttpRequest req, ConfigStore cfg, PushStore push) =>
+{
+    var cur = cfg.Get();
+    string? p = req.Query["provider"].FirstOrDefault()?.ToLowerInvariant();
+    bool? phone = bool.TryParse(req.Query["phone"].FirstOrDefault(), out var b) ? b : null;
+    if (req.HasJsonContentType())
+    {
+        try
+        {
+            using var doc = await JsonDocument.ParseAsync(req.Body);
+            if (doc.RootElement.TryGetProperty("provider", out var pProp))
+                p ??= pProp.GetString()?.ToLowerInvariant();
+            if (doc.RootElement.TryGetProperty("phone", out var phProp) && (phProp.ValueKind == JsonValueKind.True || phProp.ValueKind == JsonValueKind.False))
+                phone ??= phProp.GetBoolean();
+        }
+        catch { }
+    }
+    bool target = phone ?? (p == "claude" ? !cur.Claude.PhoneApprovals : !cur.Antigravity.PhoneApprovals);
+    if (p is null or "all" or "antigravity" or "codex") cur.Antigravity.PhoneApprovals = target;
+    if (p is null or "all" or "claude" or "codex") cur.Claude.PhoneApprovals = target;
+    cfg.Save(JsonSerializer.Serialize(cur, ConfigStore.WriteOpts));
+    push.Emit("refresh", null);
+    return Results.Json(new { phoneApprovals = target, provider = p ?? "all" });
+});
+
+// Toggle disabling the PC fallback timer (keep waiting on phone without fallback).
+app.MapPost("/api/ai/fallback/toggle", (bool? disable, string? provider, ConfigStore cfg, PushStore push) =>
+{
+    var cur = cfg.Get();
+    var p = provider?.ToLowerInvariant();
+    bool target = disable ?? (p == "claude" ? !cur.Claude.DisableFallbackTimer : !cur.Antigravity.DisableFallbackTimer);
+    if (p is null or "all" or "antigravity") cur.Antigravity.DisableFallbackTimer = target;
+    if (p is null or "all" or "claude") cur.Claude.DisableFallbackTimer = target;
+    cfg.Save(JsonSerializer.Serialize(cur, ConfigStore.WriteOpts));
+    push.Emit("refresh", null);
+    return Results.Json(new { disableFallbackTimer = target, provider = p ?? "all" });
+});
+
 // Permission prompts waiting for the phone (posted by the Claude Code hook, see ClaudeHook.cs).
 app.MapGet("/api/approvals", (ApprovalStore a) => Results.Json(new { items = a.Snapshot() }));
 app.MapPost("/api/approvals/{id}", (string id, string decision, ApprovalStore a) => a.Decide(id, decision) ? Results.Ok() : Results.NotFound());

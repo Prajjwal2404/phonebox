@@ -55,6 +55,13 @@
 </div>
 <div id="navChip"><button id="ncGo"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 22h14M5 2h14M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></svg><b id="ncText"></b><small id="ncWhy"></small></button><button id="ncX" data-i18n-aria="panel.dismiss" aria-label="Dismiss"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
 
+<!-- small bottom pop-up alert for AI choices and task completions (matching navCard style) -->
+<div id="aiNotice" role="status">
+  <div class="nv-ring"><svg viewBox="0 0 44 44"><circle cx="22" cy="22" r="19"/><circle id="anRing" cx="22" cy="22" r="19" pathLength="100"/></svg><b id="anNum">15</b></div>
+  <div class="nv-text"><b id="anName">✦ Antigravity</b><span id="anLine">Choice needed</span></div>
+  <button class="nv-btn go" id="anDismiss">Got it</button>
+</div>
+
 <div class="toast" id="toast"></div>
 <div id="offline"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 16.5a5 5 0 0 1 7 0M2 8.82a15 15 0 0 1 4.17-2.65M10.66 5c4.01-.36 8.14.9 11.34 3.76M16.85 11.25a10 10 0 0 1 2.22 1.68M5 13a10 10 0 0 1 5.24-2.76M12 20h.01M2 2l20 20"/></svg><span data-i18n="panel.pcNotConnected">PC not connected</span></div>
 <div id="night"><div id="nClock">--:--</div><div id="nDate"></div></div>

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+**Antigravity Integration**
+- Non-blocking alerts on phone for interactive choice prompts (`ask_question`) and task finish events (`Stop` hook) via `~/.gemini/config/hooks.json`. Choices remain immediately actionable on PC without waiting.
+- Bottom popup card designed to match the calm page-switch countdown card (`#navCard`) with circular SVG progress ring, remaining seconds indicator, Gemini accent (`#38bdf8`), and quick-dismiss button (`Got it`).
+- High-gain synthesized desk-bell chime powered by Web Audio API with multi-harmonic overtones and dynamic range compression for clear audibility across the room.
+- AI Quotas widget toggle button updated to `🔔 Alerts` / `🔕 Muted`.
+
 **Panel**
 - Clock widget: a new option chooses which AI quota providers its status line shows; clocks saved before it show
   all of them, as before (#225, #228, [Seyamalam](https://github.com/Seyamalam)).

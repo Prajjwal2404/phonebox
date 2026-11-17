@@ -59,6 +59,8 @@ export const DEFAULT_CFG = {
   display: { showSeconds: true, idleReturnSec: 90, vibrate: true, volumeKeys: true },
   pages: FALLBACK_PAGES,
   shortcuts: [],
+  antigravity: { phoneApprovals: true, timeoutSec: 15, disableFallbackTimer: false, onlyWhenAway: false, playSound: true },
+  claude: { phoneApprovals: true, timeoutSec: 90, disableFallbackTimer: false },
 };
 
 export const store = {
@@ -890,6 +892,114 @@ export function handleNotify(d) {
   if (d.page != null) requestPage({ page: d.page, name: d.title || null, countdown: Number.isFinite(countdown) ? Math.min(30, Math.max(0, countdown)) : undefined });
 }
 
+let aiNoticeCountdown = null;
+
+export function playChime(kind = 'choice') {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    if (ctx.state === 'suspended') ctx.resume();
+
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.setValueAtTime(-16, ctx.currentTime);
+    comp.knee.setValueAtTime(6, ctx.currentTime);
+    comp.ratio.setValueAtTime(12, ctx.currentTime);
+    comp.attack.setValueAtTime(0.002, ctx.currentTime);
+    comp.release.setValueAtTime(0.2, ctx.currentTime);
+
+    const master = ctx.createGain();
+    master.gain.setValueAtTime(2.2, ctx.currentTime);
+    master.connect(comp);
+    comp.connect(ctx.destination);
+
+    const now = ctx.currentTime;
+
+    const playBell = (freq, start, duration, vol = 1.0) => {
+      const partials = [
+        { mult: 1.0, type: 'triangle', gainRatio: 0.8 },
+        { mult: 2.0, type: 'triangle', gainRatio: 0.5 },
+        { mult: 3.0, type: 'sine',     gainRatio: 0.35 },
+        { mult: 4.2, type: 'sine',     gainRatio: 0.2 }
+      ];
+      partials.forEach((p) => {
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = p.type;
+        osc.frequency.setValueAtTime(freq * p.mult, start);
+        g.gain.setValueAtTime(vol * p.gainRatio, start);
+        g.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+        osc.connect(g);
+        g.connect(master);
+        osc.start(start);
+        osc.stop(start + duration);
+      });
+    };
+
+    if (kind === 'done') {
+      playBell(1046.5, now, 0.45, 1.0);
+      playBell(1318.5, now + 0.12, 0.5, 1.1);
+      playBell(2093.0, now + 0.25, 0.85, 1.3);
+    } else {
+      playBell(1396.9, now, 0.4, 1.1);
+      playBell(1760.0, now + 0.13, 0.75, 1.4);
+    }
+  } catch (_) {}
+}
+
+export function handleAiNotice(d) {
+  if (!d) return;
+  undim();
+  if (nightOn) { wakeUntil = Date.now() + 30_000; setNight(false); }
+  buzz('0,70,110,70');
+  if (d.sound !== false && cfg.antigravity?.playSound !== false) {
+    playChime(d.kind);
+  }
+
+  const el = $('aiNotice');
+  if (!el) return;
+  const nameEl = $('anName');
+  const lineEl = $('anLine');
+  const numEl = $('anNum');
+  const ring = $('anRing');
+
+  if (nameEl) nameEl.textContent = d.title ? `✦ ${d.title}` : '✦ Antigravity';
+  if (lineEl) lineEl.textContent = d.text || 'Choice needed';
+
+  clearInterval(aiNoticeCountdown);
+
+  const sec = typeof d.timeoutSec === 'number' ? d.timeoutSec : (cfg.antigravity?.disableFallbackTimer ? 0 : (cfg.antigravity?.timeoutSec ?? 15));
+  if (sec > 0) {
+    let left = sec;
+    if (numEl) numEl.textContent = left;
+    if (ring) {
+      ring.style.animation = 'none';
+      void ring.getBoundingClientRect();
+      ring.style.animation = `nav-ring ${sec}s linear forwards`;
+    }
+    aiNoticeCountdown = setInterval(() => {
+      left--;
+      if (left <= 0) {
+        clearInterval(aiNoticeCountdown);
+        el.classList.remove('on');
+      } else if (numEl) {
+        numEl.textContent = left;
+      }
+    }, 1000);
+  } else {
+    if (numEl) numEl.textContent = '✦';
+    if (ring) ring.style.animation = 'none';
+  }
+
+  $('anDismiss').onclick = () => {
+    haptic();
+    clearInterval(aiNoticeCountdown);
+    el.classList.remove('on');
+  };
+
+  el.classList.add('on');
+}
+
 // ---------------------------------------------------------------- permission prompts (Claude Code hook → phone)
 export let approvals = [];
 export let approvalShown = null;
@@ -945,6 +1055,11 @@ export function renderApproval() {
   $('apAllow').hidden = $('apDeny').hidden = asking;
   $('apSkip').hidden = !asking;
   $('apSource').textContent = a.source || 'Claude Code';
+  const isAntigravity = (a.source || '').toLowerCase().includes('antigravity');
+  const card = box.querySelector('.ap-card');
+  if (card) card.style.setProperty('--ap-accent', isAntigravity ? '#38bdf8' : '#d97757');
+  const logoEl = box.querySelector('.ap-logo');
+  if (logoEl) logoEl.textContent = isAntigravity ? '✦' : '✳';
   $('apProject').textContent = a.project || a.session || '';
   $('apCount').textContent = approvals.length > 1 ? t('panel.oneOfN', { n: approvals.length }) : '';
   $('apTool').textContent = a.tool;
@@ -958,6 +1073,10 @@ export function renderApproval() {
 export function tickApproval() {
   const a = approvals[0];
   if (!a || $('approval').hidden) return;
+  if (!a.expiresAt || a.expiresAt > Date.now() + 86400000) {
+    $('apTime').textContent = a.kind === 'question' ? 'Answer on PC when ready' : 'Waiting on phone (fallback disabled)';
+    return;
+  }
   const left = a.expiresAt - Date.now();
   $('apTime').textContent = a.kind === 'question' ? t('panel.answerInTerminal')
     : left > 0 ? t('panel.askedInTerminalIn', { time: fmtTime(left) }) : t('panel.askingInTerminal');
@@ -1009,6 +1128,7 @@ export function handleEvent(e) {
   if (PREVIEW && (e.kind === 'goto' || e.kind === 'back' || e.kind === 'reload')) return; // the editor picks the page
   if (e.kind === 'approval' || e.kind === 'approval-done') loadApprovals();
   else if (e.kind === 'notify' && e.data) handleNotify(e.data);
+  else if (e.kind === 'ai-notice' && e.data) handleAiNotice(e.data);
   else if (e.kind === 'goto' && e.data) requestPage(e.data);
   else if (e.kind === 'back' && e.data) requestBack(e.data.rule);
   else if (e.kind === 'refresh') { loadConfig(); loadQuotas(); loadWork(); loadPush(); loadWeather(true); loadCalendar(); }
@@ -1680,7 +1800,7 @@ window.addEventListener('resize', () => { buildLayout(); goPage(curPage, true); 
 
 ['pointerdown', 'touchstart'].forEach((ev) => document.addEventListener(ev, (e) => {
   if (dimmed) wakeFromDim();
-  if (e.target?.closest?.('#navCard, #navChip')) return;
+  if (e.target?.closest?.('#navCard, #navChip, #aiNotice')) return;
   lastTouch = lastUserTouch = Date.now();
   if (navQueue.length) { navQueue = navQueue.filter((r) => r.kind !== 'home'); pump(); }
   if (nightOn) { wakeUntil = Date.now() + 30_000; setNight(false); }

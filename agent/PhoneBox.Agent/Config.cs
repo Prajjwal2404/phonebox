@@ -19,6 +19,7 @@ public sealed class AgentConfig
     public LanConfig Lan { get; set; } = new();
     public UpdateConfig Updates { get; set; } = new();
     public ClaudeConfig Claude { get; set; } = new();
+    public AntigravityConfig Antigravity { get; set; } = new();
     public List<PageConfig> Pages { get; set; } = [];
     public List<Shortcut> Shortcuts { get; set; } = [];
     public List<RuleConfig> Rules { get; set; } = [];
@@ -81,6 +82,8 @@ public sealed class AgentConfig
         // names only (for the Rules widget); what a rule matches on stays here
         rules = Rules.Select(r => new { r.Id, r.Name, r.Enabled, r.When }),
         charge = new { Charge.Enabled, Charge.Min, Charge.Max },
+        claude = new { Claude.PhoneApprovals, Claude.TimeoutSec, Claude.DisableFallbackTimer, Claude.OnlyWhenAway },
+        antigravity = new { Antigravity.PhoneApprovals, Antigravity.TimeoutSec, Antigravity.DisableFallbackTimer, Antigravity.OnlyWhenAway, Antigravity.PlaySound },
     };
 
     /// <summary>Ending processes is allowed when an enabled page has a processes widget that allows it.</summary>
@@ -205,8 +208,24 @@ public sealed class ClaudeConfig
     public bool PhoneApprovals { get; set; } = true;
     /// <summary>How long the phone may take before Claude Code asks in the terminal instead.</summary>
     public int TimeoutSec { get; set; } = 90;
+    /// <summary>Disable PC fallback timer; keeps waiting on the phone without falling back on timeout.</summary>
+    public bool DisableFallbackTimer { get; set; }
     /// <summary>Only use the phone when the PC has been idle for a minute (you are away from the keyboard).</summary>
     public bool OnlyWhenAway { get; set; }
+}
+
+public sealed class AntigravityConfig
+{
+    /// <summary>Show Antigravity alerts (choice needed, task finished) on the phone.</summary>
+    public bool PhoneApprovals { get; set; } = true;
+    /// <summary>Notification auto-dismiss duration in seconds (0 = disabled).</summary>
+    public int TimeoutSec { get; set; } = 15;
+    /// <summary>Disable auto-dismiss timer; keep notification on phone until dismissed.</summary>
+    public bool DisableFallbackTimer { get; set; }
+    /// <summary>Only use the phone when the PC has been idle for a minute.</summary>
+    public bool OnlyWhenAway { get; set; }
+    /// <summary>Play sound when notification arrives on phone.</summary>
+    public bool PlaySound { get; set; } = true;
 }
 
 public sealed class PageConfig
@@ -531,6 +550,8 @@ public sealed partial class ConfigStore(string path)
         if (c.Ping.Host.Length > 253 || c.Ping.Host.Any(ch => ch <= ' ' || ch > '~')) c.Ping.Host = PingMonitor.DefaultHost;
         c.Claude ??= new();
         c.Claude.TimeoutSec = Math.Clamp(c.Claude.TimeoutSec, 10, 3600);
+        c.Antigravity ??= new();
+        c.Antigravity.TimeoutSec = Math.Clamp(c.Antigravity.TimeoutSec, 10, 3600);
         if (string.IsNullOrWhiteSpace(c.Updates.Repo)) c.Updates.Repo = "ersinkoc/phonebox";
         c.Lan.Port = Math.Clamp(c.Lan.Port, 1024, 65535);
         if (string.IsNullOrWhiteSpace(c.Lan.Token)) c.Lan.Token = NewToken();
