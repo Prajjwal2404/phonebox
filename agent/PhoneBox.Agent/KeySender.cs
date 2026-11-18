@@ -15,6 +15,9 @@ public static class KeySender
     internal const string AccessibilityHint =
         "macOS refused: allow PhoneBoxAgent in System Settings › Privacy & Security › Accessibility";
 
+    internal record struct MouseCall(string Action, int Dx, int Dy, int Delta);
+    internal static Action<MouseCall>? TestMouseSink;
+
     private static readonly string[] Modifiers = ["ctrl", "shift", "alt", "win"];
 
     /// <summary>Splits "Ctrl+Shift+M, Win+D" into combos of normalized key names; throws on unknown keys.</summary>
@@ -158,6 +161,72 @@ public static class KeySender
     [StructLayout(LayoutKind.Explicit)] private struct InputUnion { [FieldOffset(0)] public MOUSEINPUT mi; [FieldOffset(0)] public KEYBDINPUT ki; }
     [StructLayout(LayoutKind.Sequential)] private struct KEYBDINPUT { public ushort wVk; public ushort wScan; public uint dwFlags; public uint time; public nint dwExtraInfo; }
     [StructLayout(LayoutKind.Sequential)] private struct MOUSEINPUT { public int dx, dy; public uint mouseData, dwFlags, time; public nint dwExtraInfo; }
+
+    private const uint INPUT_MOUSE = 0;
+    private const uint MOUSEEVENTF_MOVE = 0x0001;
+    private const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
+    private const uint MOUSEEVENTF_LEFTUP = 0x0004;
+    private const uint MOUSEEVENTF_RIGHTDOWN = 0x0008;
+    private const uint MOUSEEVENTF_RIGHTUP = 0x0010;
+    private const uint MOUSEEVENTF_WHEEL = 0x0800;
+    private const uint MOUSEEVENTF_HWHEEL = 0x01000;
+
+    private static INPUT MouseInput(int dx, int dy, uint mouseData, uint flags) => new()
+    {
+        type = INPUT_MOUSE,
+        u = new InputUnion { mi = new MOUSEINPUT { dx = dx, dy = dy, mouseData = mouseData, dwFlags = flags } },
+    };
+
+    public static void MouseMove(int dx, int dy)
+    {
+        if (TestMouseSink is not null) { TestMouseSink(new MouseCall("move", dx, dy, 0)); return; }
+        INPUT[] inputs = [MouseInput(dx, dy, 0, MOUSEEVENTF_MOVE)];
+        SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
+    }
+
+    public static void MouseClick()
+    {
+        if (TestMouseSink is not null) { TestMouseSink(new MouseCall("click", 0, 0, 0)); return; }
+        INPUT[] inputs = [MouseInput(0, 0, 0, MOUSEEVENTF_LEFTDOWN), MouseInput(0, 0, 0, MOUSEEVENTF_LEFTUP)];
+        SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
+    }
+
+    public static void MouseRightClick()
+    {
+        if (TestMouseSink is not null) { TestMouseSink(new MouseCall("rightClick", 0, 0, 0)); return; }
+        INPUT[] inputs = [MouseInput(0, 0, 0, MOUSEEVENTF_RIGHTDOWN), MouseInput(0, 0, 0, MOUSEEVENTF_RIGHTUP)];
+        SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
+    }
+
+    public static void MouseScroll(int delta)
+    {
+        if (delta == 0) return;
+        if (TestMouseSink is not null) { TestMouseSink(new MouseCall("scroll", 0, 0, delta)); return; }
+        INPUT[] inputs = [MouseInput(0, 0, (uint)delta, MOUSEEVENTF_WHEEL)];
+        SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
+    }
+
+    public static void MouseHorizontalScroll(int delta)
+    {
+        if (delta == 0) return;
+        if (TestMouseSink is not null) { TestMouseSink(new MouseCall("hscroll", 0, 0, delta)); return; }
+        INPUT[] inputs = [MouseInput(0, 0, (uint)delta, MOUSEEVENTF_HWHEEL)];
+        SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
+    }
+
+    public static void MouseDown()
+    {
+        if (TestMouseSink is not null) { TestMouseSink(new MouseCall("mouseDown", 0, 0, 0)); return; }
+        INPUT[] inputs = [MouseInput(0, 0, 0, MOUSEEVENTF_LEFTDOWN)];
+        SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
+    }
+
+    public static void MouseUp()
+    {
+        if (TestMouseSink is not null) { TestMouseSink(new MouseCall("mouseUp", 0, 0, 0)); return; }
+        INPUT[] inputs = [MouseInput(0, 0, 0, MOUSEEVENTF_LEFTUP)];
+        SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
+    }
 #else
     /// <summary>Presses one parsed combo; false when xdotool or wtype failed (macOS throws when it refuses).</summary>
     public static bool SendCombo(List<string> combo) => Send(combo);
@@ -247,6 +316,126 @@ public static class KeySender
     {
         if (Sh.RunWithTimeout(5000, "osascript", "-e", script) is null)
             throw new InvalidOperationException(AccessibilityHint);
+    }
+
+    private static readonly object UnixMoveLock = new();
+    private static readonly object UnixSendLock = new();
+    private static int _unixPendingDx;
+    private static int _unixPendingDy;
+    private static bool _unixMoveScheduled;
+
+    private static void FlushUnixMove()
+    {
+        int dx, dy;
+        lock (UnixMoveLock)
+        {
+            dx = _unixPendingDx;
+            dy = _unixPendingDy;
+            _unixPendingDx = 0;
+            _unixPendingDy = 0;
+        }
+        if (dx != 0 || dy != 0)
+            UnixMouse("mousemove_relative", "--", dx.ToString(System.Globalization.CultureInfo.InvariantCulture), dy.ToString(System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    private static void UnixAction(params string[] args)
+    {
+        lock (UnixSendLock)
+        {
+            FlushUnixMove();
+            UnixMouse(args);
+        }
+    }
+
+    private static void UnixMouse(params string[] args)
+    {
+        if (OperatingSystem.IsMacOS())
+            throw new PlatformNotSupportedException("The Trackpad widget is not supported on macOS yet.");
+        var xdotool = Sh.Which("xdotool");
+        if (xdotool is null)
+            throw new InvalidOperationException("controlling the mouse needs xdotool (X11)");
+        var psi = new System.Diagnostics.ProcessStartInfo(xdotool);
+        foreach (var a in args) psi.ArgumentList.Add(a);
+        try
+        {
+            ToolProcess.RunAsync(psi, TimeSpan.FromSeconds(2), CancellationToken.None).GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException("xdotool failed: " + ex.Message, ex);
+        }
+    }
+
+    public static void MouseMove(int dx, int dy)
+    {
+        if (TestMouseSink is not null) { TestMouseSink(new MouseCall("move", dx, dy, 0)); return; }
+        lock (UnixMoveLock)
+        {
+            _unixPendingDx += dx;
+            _unixPendingDy += dy;
+            if (_unixMoveScheduled) return;
+            _unixMoveScheduled = true;
+        }
+        Task.Run(async () =>
+        {
+            await Task.Delay(16);
+            lock (UnixSendLock)
+            {
+                lock (UnixMoveLock) { _unixMoveScheduled = false; }
+                FlushUnixMove();
+            }
+        });
+    }
+
+    public static void MouseClick()
+    {
+        if (TestMouseSink is not null) { TestMouseSink(new MouseCall("click", 0, 0, 0)); return; }
+        UnixAction("click", "1");
+    }
+
+    public static void MouseRightClick()
+    {
+        if (TestMouseSink is not null) { TestMouseSink(new MouseCall("rightClick", 0, 0, 0)); return; }
+        UnixAction("click", "3");
+    }
+
+    private static int _unixVScrollAcc;
+    private static int _unixHScrollAcc;
+
+    public static void MouseScroll(int delta)
+    {
+        if (delta == 0) return;
+        if (TestMouseSink is not null) { TestMouseSink(new MouseCall("scroll", 0, 0, delta)); return; }
+        _unixVScrollAcc += delta;
+        var n = Math.Abs(_unixVScrollAcc) / 120;
+        if (n == 0) return;
+        var dir = _unixVScrollAcc > 0 ? "4" : "5";
+        _unixVScrollAcc -= Math.Sign(_unixVScrollAcc) * n * 120;
+        UnixAction("click", "--repeat", n.ToString(System.Globalization.CultureInfo.InvariantCulture), dir);
+    }
+
+    public static void MouseHorizontalScroll(int delta)
+    {
+        if (delta == 0) return;
+        if (TestMouseSink is not null) { TestMouseSink(new MouseCall("hscroll", 0, 0, delta)); return; }
+        _unixHScrollAcc += delta;
+        var n = Math.Abs(_unixHScrollAcc) / 120;
+        if (n == 0) return;
+        var dir = _unixHScrollAcc > 0 ? "7" : "6";
+        _unixHScrollAcc -= Math.Sign(_unixHScrollAcc) * n * 120;
+        UnixAction("click", "--repeat", n.ToString(System.Globalization.CultureInfo.InvariantCulture), dir);
+    }
+
+    public static void MouseDown()
+    {
+        if (TestMouseSink is not null) { TestMouseSink(new MouseCall("mouseDown", 0, 0, 0)); return; }
+        UnixAction("mousedown", "1");
+    }
+
+    public static void MouseUp()
+    {
+        if (TestMouseSink is not null) { TestMouseSink(new MouseCall("mouseUp", 0, 0, 0)); return; }
+        UnixAction("mouseup", "1");
     }
 #endif
 }

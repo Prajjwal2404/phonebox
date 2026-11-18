@@ -31,6 +31,10 @@ Last updated: 2026-11-15 (PhoneBox 0.9.6).
   the agent captures what the default output device plays, analyzes it in memory and sends only 48 loudness levels
   per frame to the phone. Audio is never stored or sent; capture stops a few seconds after the widget leaves the
   screen, and removing the widget or turning its page off turns it off.
+- **Mouse control for the Trackpad widget**: touches and scroll gestures are sent directly from the phone to the agent
+  on your computer (over USB or pinned-TLS Wi-Fi) to control the cursor and scroll. No mouse or gesture data is ever
+  recorded, stored or sent outside your local connection. It is active only while an enabled page contains the Trackpad
+  widget with **Allow controlling the mouse from the phone** enabled (off by default).
 - **Local services**: LibreHardwareMonitor's web server (`127.0.0.1:8085`), a running Antigravity language server
   (loopback, over HTTP or HTTPS), the Docker / Podman socket, OBS WebSocket and the Discord desktop app's local connection (a named pipe
   or socket on this computer) are local connections.

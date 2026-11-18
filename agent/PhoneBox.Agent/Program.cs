@@ -169,6 +169,7 @@ app.Use((ctx, next) =>
 //  - Local port 8765 listens on 127.0.0.1 only; the Host check blocks DNS rebinding. The phone's USB proxy sends
 //    no Origin header; from browsers only the settings page itself (same origin) is accepted (no CSRF).
 //  - The optional Wi-Fi port only serves the phone API, only over TLS, and only with the paired token.
+app.UseWebSockets();
 app.UseRouting();
 app.Use(async (ctx, next) =>
 {
@@ -222,6 +223,8 @@ app.Use(async (ctx, next) =>
     ctx.Response.Headers["X-Frame-Options"] = ctx.Request.Path.StartsWithSegments("/panel") ? "SAMEORIGIN" : "DENY";
     await next();
 });
+
+app.Map("/api/trackpad", TrackpadHandler.HandleEndpoint);
 
 // ---------------------------------------------------------------- Wi-Fi pairing (local / USB only)
 // The phone calls this through the USB tunnel and stores everything it needs to connect over Wi-Fi.

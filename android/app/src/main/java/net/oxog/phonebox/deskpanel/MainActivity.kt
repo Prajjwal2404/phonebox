@@ -259,6 +259,7 @@ class MainActivity : Activity(), SensorEventListener {
         dictation.cancel(0)
         sensors?.unregisterListener(this)
         stream.stop()
+        link.trackpadSocket.close()
         link.close()
         (web.parent as? ViewGroup)?.removeView(web) // a WebView must be detached before destroy()
         web.destroy()
@@ -308,6 +309,17 @@ class MainActivity : Activity(), SensorEventListener {
 
     inner class Bridge {
         private fun ok(key: String) = key == bridgeKey
+
+        private val validTrackpadTypes = setOf("move", "click", "rightClick", "mousedown", "mouseup", "scroll", "hscroll")
+
+        @JavascriptInterface
+        fun trackpad(key: String, type: String, dx: Float, dy: Float, delta: Float) {
+            if (!ok(key) || type !in validTrackpadTypes) return
+            val cleanDx = if (dx.isFinite()) dx else 0f
+            val cleanDy = if (dy.isFinite()) dy else 0f
+            val cleanDelta = if (delta.isFinite()) delta else 0f
+            link.sendTrackpad(type, cleanDx, cleanDy, cleanDelta)
+        }
 
         /** Screen brightness 0..1; a negative value returns control to the system setting. */
         @JavascriptInterface
