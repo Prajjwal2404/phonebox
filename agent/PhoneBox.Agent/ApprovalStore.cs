@@ -51,15 +51,16 @@ public sealed class ApprovalStore(PushStore events, ILogger<ApprovalStore> log)
     /// <summary>Shows the request on the phone and waits for "allow" / "deny"; null = no answer (fall back to the terminal).</summary>
     public async Task<string?> AskAsync(Approval a, CancellationToken aborted)
     {
-        if (!PhoneConnected || a.ExpiresAt <= _clock.GetUtcNow().ToUnixTimeMilliseconds()) return null;
+        if (!PhoneConnected || (a.ExpiresAt > 0 && a.ExpiresAt <= _clock.GetUtcNow().ToUnixTimeMilliseconds())) return null;
         var pending = new Pending(a, new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously));
         _pending[a.Id] = pending;
         events.Emit("approval", JsonSerializer.SerializeToElement(new { id = a.Id }));
         log.LogInformation("approval {Id}: {Tool} in {Project} sent to the phone", a.Id, a.Tool, a.Project);
         try
         {
-            // exactly the time left: Decide refuses an answer from the expiry on, so waiting longer only delays the terminal
-            var timeout = TimeSpan.FromMilliseconds(Math.Max(0, a.ExpiresAt - _clock.GetUtcNow().ToUnixTimeMilliseconds()));
+            var timeout = a.ExpiresAt <= 0
+                ? Timeout.InfiniteTimeSpan
+                : TimeSpan.FromMilliseconds(Math.Max(0, a.ExpiresAt - _clock.GetUtcNow().ToUnixTimeMilliseconds()));
             // The hook process goes away when the user answers in the terminal; that cancels the request here.
             await Task.WhenAny(pending.Decision.Task, Task.Delay(timeout, aborted));
             // The decision task is the one outcome: a timeout or cancel closes it with null, so a Decide that loses
@@ -80,10 +81,7 @@ public sealed class ApprovalStore(PushStore events, ILogger<ApprovalStore> log)
 
     public bool Decide(string id, string decision, string? value = null)
     {
-        if (!_pending.TryGetValue(id, out var p)) return false;
-        var a = p.Approval;
-        var now = _clock.GetUtcNow().ToUnixTimeMilliseconds();
-        if (a.ExpiresAt <= now) return false;
+        if (a.ExpiresAt > 0 && a.ExpiresAt <= now) return false;
         // An answer is tied to the card it answers — the phone's countdown is a guard rail, not the security check.
         // A permission card takes allow / deny, and "always" only when the card offers it (OpenCode saves the
         // pattern) and not before the countdown. A question card takes an answer: one of the card's choices, or a

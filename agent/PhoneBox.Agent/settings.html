@@ -779,6 +779,7 @@ nav a.on::before { color: var(--accent); }
         <p class="hint" id="codexHookTrust" style="display:none;margin:-2px 0 12px 100px" data-i18n-html="s.approvals.codexTrust">Required once: start a new Codex session, then trust the PhoneBox hook in <b>Settings › Hooks</b> (desktop) or <code>/hooks</code> (CLI).</p>
         <div class="row" style="margin-bottom:12px"><b style="min-width:92px" data-i18n="s.approvals.claude">Claude Code</b><button class="btn" id="claudeHookBtn" data-i18n="s.claude.installHook">Install hook</button><span class="hint" id="claudeHookState"></span></div>
         <div class="row" style="margin-bottom:8px"><label class="switch"><input type="checkbox" data-bind="claude.phoneApprovals"><span></span></label> <span data-i18n="s.claude.askOnPhone">Ask on the phone</span></div>
+        <label class="check"><input type="checkbox" data-bind="claude.disableFallbackTimer"> Disable PC fallback timer (keep waiting on phone without falling back)</label>
         <label class="check"><input type="checkbox" data-bind="claude.shareSessionTitles"> <span data-i18n="s.claude.shareSessionTitles">Show Claude Code chat titles on the phone (Claude Code often draws them from your first prompt)</span></label>
         <label class="check"><input type="checkbox" data-bind="claude.onlyWhenAway"> <span data-i18n="s.claude.onlyWhenAway">Only when I am away from the PC (no keyboard or mouse for a minute)</span></label>
         <label class="check"><input type="checkbox" data-bind="claude.shareConversation"> <span data-i18n="s.claude.shareConversation">Show the conversation on the phone (tap a Claude Code session to see its recent messages and steps; these are your prompts and Claude's replies, sent only to your phone)</span></label>
@@ -791,6 +792,18 @@ nav a.on::before { color: var(--accent); }
         <label class="check"><input type="checkbox" data-bind="opencode.shareSessionTitles"> <span data-i18n="s.opencode.shareSessionTitles">Show OpenCode session titles on the phone (OpenCode draws them from the conversation)</span></label>
         <div class="row" style="margin-bottom:8px"><label class="switch"><input type="checkbox" data-bind="opencode.watchWsl"><span></span></label> <span data-i18n="s.opencode.watchWsl">Also watch OpenCode in WSL</span></div>
         <div class="field" style="max-width:260px"><label data-i18n="s.opencode.countdown">Seconds before Allow always can be pressed (0 = at once)</label><input type="number" min="0" max="60" data-bind="opencode.alwaysCountdownSec" data-type="int"></div>
+      </div>
+
+      <div class="card">
+        <h3>Antigravity notifications</h3>
+        <p class="hint" style="margin:0 0 12px">Alert the phone with a bottom pop-up card when Antigravity needs a choice on the PC or finishes a task.
+          Uses lifecycle hooks in <code>~/.gemini/config/hooks.json</code>; PhoneBox configures them for you.</p>
+        <div class="row" style="margin-bottom:12px"><button class="btn" id="agHookBtn">Install hook</button><span class="hint" id="agHookState"></span></div>
+        <div class="row" style="margin-bottom:8px"><label class="switch"><input type="checkbox" data-bind="antigravity.phoneApprovals"><span></span></label> <span>Show notifications on phone</span></div>
+        <label class="check"><input type="checkbox" data-bind="antigravity.playSound"> Play notification sound on phone</label>
+        <label class="check"><input type="checkbox" data-bind="antigravity.disableFallbackTimer"> Disable auto-dismiss timer (keep notification on phone until dismissed)</label>
+        <label class="check"><input type="checkbox" data-bind="antigravity.onlyWhenAway"> Only when I am away from the PC (no keyboard or mouse for a minute)</label>
+        <div class="field" style="max-width:260px;margin-top:12px"><label>Notification auto-dismiss (seconds)</label><input type="number" min="5" max="300" data-bind="antigravity.timeoutSec" data-type="int"></div>
       </div>
 
       <div class="card">
@@ -3317,9 +3330,10 @@ async function loadInfo() {
     $('restartBtn').hidden = !lan.restartNeeded;
     renderUpdate(await (await fetch('/api/update')).json());
     renderWebhooks(lan);
-    const [claudeHook, codexHook] = await Promise.all([
-      fetch('/api/claude/hook').then((r) => r.json()),
-      fetch('/api/codex/hook').then((r) => r.json()),
+    const [claudeHook, codexHook, aghk] = await Promise.all([
+      fetch('/api/claude/hook').then((r) => r.json()).catch(() => ({})),
+      fetch('/api/codex/hook').then((r) => r.json()).catch(() => ({})),
+      fetch('/api/antigravity/hook').then((r) => r.json()).catch(() => ({})),
     ]);
     for (const [name, hk] of [['claude', claudeHook], ['codex', codexHook]]) {
       $(`${name}HookState`).textContent = hk.installed ? t('s.claude.installedIn', { path: hk.path }) : t('s.claude.notInstalled');
@@ -3329,6 +3343,11 @@ async function loadInfo() {
       btn.dataset.installed = hk.installed ? '1' : '';
     }
     $('codexHookTrust').style.display = codexHook.installed ? '' : 'none';
+    if ($('agHookState')) $('agHookState').textContent = aghk.installed ? 'Installed in ' + aghk.path : 'Not installed';
+    if ($('agHookBtn')) {
+      $('agHookBtn').textContent = aghk.installed ? 'Remove hook' : 'Install hook';
+      $('agHookBtn').dataset.installed = aghk.installed ? '1' : '';
+    }
     $('info').replaceChildren(
       h('dt', {}, 'Version'), h('dd', {}, i.version),
       h('dt', {}, t('s.adv.settingsFile')), h('dd', {}, h('code', {}, i.configPath)),
@@ -3341,7 +3360,8 @@ async function loadInfo() {
 // The form reads every section it binds and renders, so a config without one — an older export, or a
 // hand-trimmed paste in Apply JSON — gets the same defaults a fresh load does before anything renders.
 function fillDefaults() {
-  cfg.pages = fitPages(cfg.pages); cfg.shortcuts ??= []; cfg.rules ??= []; cfg.display ??= {}; cfg.night = { enabled: true, start: '00:30', end: '07:30', brightness: 0.02, ...cfg.night }; cfg.weather ??= {}; cfg.weather.unit ??= 'celsius'; cfg.weather.model ??= ''; cfg.photos ??= { source: 'folder', folder: '', subfolders: true, immichUrl: '', immichKey: '', immichAlbum: '', immichAlbumName: '' }; cfg.lan ??= { enabled: false, port: 8766 }; cfg.updates ??= { auto: true, repo: 'ersinkoc/phonebox' }; cfg.claude ??= { phoneApprovals: true, timeoutSec: 90, onlyWhenAway: false, shareSessionTitles: false, shareConversation: false }; cfg.opencode ??= { phoneApprovals: false, timeoutSec: 90, onlyWhenAway: false, alwaysCountdownSec: 10, watchWsl: false, shareSessionTitles: false, sessions: false };
+  cfg.pages = fitPages(cfg.pages); cfg.shortcuts ??= []; cfg.rules ??= []; cfg.display ??= {}; cfg.night = { enabled: true, start: '00:30', end: '07:30', brightness: 0.02, ...cfg.night }; cfg.weather ??= {}; cfg.weather.unit ??= 'celsius'; cfg.weather.model ??= ''; cfg.photos ??= { source: 'folder', folder: '', subfolders: true, immichUrl: '', immichKey: '', immichAlbum: '', immichAlbumName: '' }; cfg.lan ??= { enabled: false, port: 8766 }; cfg.updates ??= { auto: true, repo: 'ersinkoc/phonebox' }; cfg.claude ??= { phoneApprovals: true, timeoutSec: 90, disableFallbackTimer: false, onlyWhenAway: false, shareSessionTitles: false, shareConversation: false }; cfg.claude.disableFallbackTimer ??= false; cfg.opencode ??= { phoneApprovals: false, timeoutSec: 90, onlyWhenAway: false, alwaysCountdownSec: 10, watchWsl: false, shareSessionTitles: false, sessions: false };
+  cfg.antigravity ??= { phoneApprovals: true, timeoutSec: 15, disableFallbackTimer: false, onlyWhenAway: false, playSound: true };
   cfg.codexBar ??= { providers: ['claude', 'codex', 'antigravity'], rotate: true, pageSize: 2, rotateInterval: 8 };
   for (const [k, v] of Object.entries({ language: 'auto', hour12: false, idleReturnSec: 90, switchCountdownSec: 3, touchGraceSec: 20, minDwellSec: 15, holdMaxMin: 30, keepAwake: true, openOnConnect: true,
     showSeconds: true, vibrate: true, finishToast: true, volumeKeys: true, artTint: true, proximityWake: true, orientation: 'landscape', theme: 'default', accent: '#2dd4bf' })) cfg.display[k] ??= v;
@@ -3479,6 +3499,13 @@ for (const name of ['codex', 'claude']) $(`${name}HookBtn`).onclick = async () =
   const successKey = remove ? 's.approvals.hookRemoved' : name === 'codex' ? 's.approvals.codexHookInstalled' : 's.approvals.hookInstalled';
   r.ok ? toast(t(successKey, { agent: name === 'codex' ? 'Codex' : 'Claude Code' }))
     : toast(j.error || t('s.approvals.hookError'), true);
+  loadInfo();
+};
+if ($('agHookBtn')) $('agHookBtn').onclick = async () => {
+  const remove = !!$('agHookBtn').dataset.installed;
+  const r = await fetch('/api/antigravity/hook', { method: remove ? 'DELETE' : 'POST' });
+  const j = await r.json().catch(() => ({}));
+  r.ok ? toast(remove ? 'Hook removed' : 'Hook installed — new Antigravity sessions pick it up') : toast(j.error || 'Could not change the hook', true);
   loadInfo();
 };
 $('modalClose').onclick = closeModal;

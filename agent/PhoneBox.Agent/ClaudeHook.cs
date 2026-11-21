@@ -35,11 +35,12 @@ public static class ClaudeHook
         var session = sessionPrefix is null ? null : sessions.Snapshot().FirstOrDefault(s => s.Id == sessionPrefix + sessionId);
         var project = session?.Name ?? ProjectName(cwd);
         var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var expiresAt = c.DisableFallbackTimer ? 0 : now + Math.Clamp(c.TimeoutSec, 10, 3600) * 1000L;
         // AskUserQuestion is a question, not a permission: Allow would only open the same question in the terminal.
         var question = allowQuestions && tool == "AskUserQuestion";
         var shownCwd = cwd.Length <= 1000 ? cwd : "…" + cwd[^999..];
         var a = new Approval(ApprovalStore.NewId(), source, sessionId, project, shownCwd, ToolTitle(tool), question ? QuestionDetail(ti) : Detail(tool, ti),
-            ti.ValueKind == JsonValueKind.Object ? Str(ti, "description") : null, now, now + Math.Clamp(c.TimeoutSec, 10, 3600) * 1000L,
+            ti.ValueKind == JsonValueKind.Object ? Str(ti, "description") : null, now, expiresAt,
             question ? "question" : "permission");
 
         var decision = await approvals.AskAsync(a, aborted);
