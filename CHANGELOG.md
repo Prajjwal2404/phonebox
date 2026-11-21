@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.9.28 — 2026-11-21
+
+Antigravity notifications and alerts, AI sessions with Antigravity chats, news feed categories, and Windows Start Menu shortcut.
+
+**Antigravity Integration**
+- Non-blocking alerts on phone for interactive choice prompts (`ask_question`) and task finish events (`Stop` hook) via `~/.gemini/config/hooks.json`.
+- Bottom popup card with circular SVG progress ring and remaining seconds indicator.
+- Synthesized metallic desk-bell chime powered by Web Audio API.
 
 **Widgets**
 - News feeds: each feed can have a **category**, and a News feeds widget can show only one category (**Only this

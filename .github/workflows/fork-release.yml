@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g. 0.9.21.1). Leave empty to use PhoneBox.Agent.csproj version'
+        description: 'Release version with 2 decimals (e.g. 0.9.27). Leave empty to use PhoneBox.Agent.csproj version'
         required: false
         default: ''
 
@@ -52,7 +52,7 @@ jobs:
       - name: Publish Windows Agent
         shell: pwsh
         run: |
-          dotnet publish agent/PhoneBox.Agent -c Release -f net10.0-windows10.0.19041.0 -r win-x64 --self-contained true -p:PublishSingleFile=true -o out --nologo
+          dotnet publish agent/PhoneBox.Agent -c Release -f net10.0-windows10.0.19041.0 -r win-x64 --self-contained true -p:PublishSingleFile=true -p:Version=${{ needs.version.outputs.version }} -p:InformationalVersion=${{ needs.version.outputs.version }} -o out --nologo
           New-Item -ItemType Directory -Force dist | Out-Null
           Compress-Archive -Path out/* -DestinationPath "dist/PhoneBoxAgent-${{ needs.version.outputs.version }}-win-x64.zip"
       - uses: actions/upload-artifact@v4
@@ -84,6 +84,7 @@ jobs:
           PHONEBOX_STORE_PASSWORD: ${{ secrets.PHONEBOX_STORE_PASSWORD || 'android' }}
           PHONEBOX_KEY_ALIAS: ${{ secrets.PHONEBOX_KEY_ALIAS || 'androiddebugkey' }}
           PHONEBOX_KEY_PASSWORD: ${{ secrets.PHONEBOX_KEY_PASSWORD || 'android' }}
+          PHONEBOX_VERSION_NAME: ${{ needs.version.outputs.version }}
         run: |
           chmod +x gradlew
           if [ -f "$RUNNER_TEMP/release.keystore" ]; then

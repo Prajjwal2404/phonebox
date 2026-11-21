@@ -45,7 +45,7 @@ public sealed class ApprovalStore(PushStore events, ILogger<ApprovalStore> log)
     public IReadOnlyList<Approval> Snapshot()
     {
         var now = _clock.GetUtcNow().ToUnixTimeMilliseconds();
-        return _pending.Values.Select(p => p.Approval).Where(a => a.ExpiresAt > now).OrderBy(a => a.CreatedAt).ToList();
+        return _pending.Values.Select(p => p.Approval).Where(a => a.ExpiresAt <= 0 || a.ExpiresAt > now).OrderBy(a => a.CreatedAt).ToList();
     }
 
     /// <summary>Shows the request on the phone and waits for "allow" / "deny"; null = no answer (fall back to the terminal).</summary>
@@ -81,6 +81,9 @@ public sealed class ApprovalStore(PushStore events, ILogger<ApprovalStore> log)
 
     public bool Decide(string id, string decision, string? value = null)
     {
+        if (!_pending.TryGetValue(id, out var p)) return false;
+        var a = p.Approval;
+        var now = _clock.GetUtcNow().ToUnixTimeMilliseconds();
         if (a.ExpiresAt > 0 && a.ExpiresAt <= now) return false;
         // An answer is tied to the card it answers — the phone's countdown is a guard rail, not the security check.
         // A permission card takes allow / deny, and "always" only when the card offers it (OpenCode saves the
