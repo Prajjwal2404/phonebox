@@ -19,15 +19,12 @@ public sealed class AgentConfig
     public LanConfig Lan { get; set; } = new();
     public UpdateConfig Updates { get; set; } = new();
     public ClaudeConfig Claude { get; set; } = new();
-<<<<<<< HEAD
     /// <summary>Cursor agent-transcript sessions on the AI sessions widget (off by default).</summary>
     public CursorConfig Cursor { get; set; } = new();
     /// <summary>OpenCode prompts and sessions on the phone; everything is off until the settings page turns it on.</summary>
     [JsonPropertyName("opencode")]
     public OpenCodeConfig OpenCode { get; set; } = new();
-=======
     public AntigravityConfig Antigravity { get; set; } = new();
->>>>>>> d4d767a (feat: add Antigravity notifications)
     public List<PageConfig> Pages { get; set; } = [];
     public List<Shortcut> Shortcuts { get; set; } = [];
     public List<RuleConfig> Rules { get; set; } = [];
@@ -92,13 +89,10 @@ public sealed class AgentConfig
         // names only (for the Rules widget); what a rule matches on stays here
         rules = Rules.Select(r => new { r.Id, r.Name, r.Enabled, r.When }),
         charge = new { Charge.Enabled, Charge.Min, Charge.Max },
-<<<<<<< HEAD
         // OpenCode prompts: how long the Allow always button waits before it can be pressed (it saves a pattern)
         opencode = new { OpenCode.AlwaysCountdownSec },
-=======
         claude = new { Claude.PhoneApprovals, Claude.TimeoutSec, Claude.DisableFallbackTimer, Claude.OnlyWhenAway },
         antigravity = new { Antigravity.PhoneApprovals, Antigravity.TimeoutSec, Antigravity.DisableFallbackTimer, Antigravity.OnlyWhenAway, Antigravity.PlaySound },
->>>>>>> d4d767a (feat: add Antigravity notifications)
     };
 
     /// <summary>Ending processes is allowed when an enabled page has a processes widget that allows it.</summary>

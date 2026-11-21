@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.27 — 2026-11-21
+
+Antigravity notifications and alerts on PhoneBox with non-blocking interactive choice prompts, task completion notifications, and synthesized desk-bell chimes.
+
+**Antigravity Integration**
+- Non-blocking alerts on phone for interactive choice prompts (`ask_question`) and task finish events (`Stop` hook) via `~/.gemini/config/hooks.json`.
+- Bottom popup card with circular SVG progress ring and remaining seconds indicator.
+- Synthesized metallic desk-bell chime powered by Web Audio API.
+
 ## 0.9.26 — 2026-11-21
 
 Two fixes: Turn off the monitor no longer makes the display go off and on again after a Modern Standby PC wakes,
