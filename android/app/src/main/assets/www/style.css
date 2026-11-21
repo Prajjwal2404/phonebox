@@ -229,6 +229,22 @@ body.offline #offline { display: flex; align-items: center; gap: 5px; }
 #ncX { padding: 5px 12px 5px 6px !important; color: var(--muted); }
 body.night #navCard, body.night #navChip { display: none; }
 
+/* ---------- AI notice card (page switch style) ---------- */
+#aiNotice {
+  position: fixed; z-index: 23; left: 50%; bottom: 18px; transform: translate(-50%, 30px);
+  display: flex; align-items: center; gap: 14px; width: max-content; max-width: min(760px, 94vw);
+  padding: 12px 14px 12px 12px; border-radius: 18px;
+  background: rgba(16, 20, 26, .97); border: 1px solid rgba(56, 189, 248, .45);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .55), 0 0 0 1px rgba(0, 0, 0, .4);
+  opacity: 0; pointer-events: none; transition: opacity .3s, transform .3s;
+}
+#aiNotice.on { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+#aiNotice .nv-ring #anRing { stroke: #38bdf8; stroke-linecap: round; stroke-dasharray: 100; stroke-dashoffset: 0; }
+#aiNotice .nv-ring b { font-size: 24px; color: #38bdf8; }
+#aiNotice .nv-text b { color: #38bdf8; }
+#aiNotice .nv-btn.go { background: rgba(56, 189, 248, .22); color: #fff; }
+body.night #aiNotice { display: none; }
+
 .toast {
   position: fixed; z-index: 20; left: 50%; bottom: 24px; transform: translate(-50%, 20px);
   display: flex; flex-direction: column; align-items: center; max-width: 80vw;
@@ -414,10 +430,31 @@ body.offline .offline-msg { display: flex; }
   border: 1px solid var(--line); border-radius: 18px;
   background: radial-gradient(90% 70% at 50% 0%, color-mix(in srgb, var(--q) 13%, transparent), transparent 70%), var(--card);
 }
-.q-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.q-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .q-logo { font-size: 17px; color: var(--q); line-height: 1; align-self: center; }
 .q-name { font-size: 15px; font-weight: 700; }
-.q-plan { font-size: 11px; color: var(--q); background: color-mix(in srgb, var(--q) 15%, transparent); padding: 2px 8px; border-radius: 7px; font-weight: 600; white-space: nowrap; }
+.q-plan { font-size: 11px; color: var(--q); background: color-mix(in srgb, var(--q) 15%, transparent); padding: 2px 8px; border-radius: 7px; font-weight: 600; white-space: nowrap; margin-left: 4px; }
+button.q-plan {
+  border: 1px solid color-mix(in srgb, var(--q) 35%, transparent);
+  cursor: pointer;
+  font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  user-select: none;
+  transition: all .15s ease;
+}
+button.q-plan:hover {
+  background: color-mix(in srgb, var(--q) 28%, transparent);
+}
+button.q-plan.pc-only {
+  color: var(--muted);
+  background: rgba(255, 255, 255, .06);
+  border-color: var(--line);
+}
+button.q-plan.pc-only:hover {
+  background: rgba(255, 255, 255, .12);
+}
 .q-upd { margin-left: auto; font-size: 11px; color: var(--dim); white-space: nowrap; }
 .q-rings { flex: 1; display: flex; justify-content: space-around; align-items: center; gap: 8px; min-height: 0; }
 .q-ring { display: flex; flex-direction: column; align-items: center; min-width: 0; flex: 1; }
@@ -1028,15 +1065,17 @@ html.beat-4 .w-onair.on .oa-sign { box-shadow: 0 0 34px rgba(239, 68, 68, .9); }
 /* ---------- permission prompt ---------- */
 #approval { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 90; background: rgba(4, 5, 8, .88); display: flex; align-items: center; justify-content: center; padding: 14px var(--pad-r) 14px var(--pad-l); }
 .ap-card {
+  --ap-accent: #d97757;
   width: 100%; height: 100%; display: flex; flex-direction: column; gap: 6px; padding: 14px 18px;
-  border-radius: 22px; background: #10131a; border: 1px solid rgba(217, 119, 87, .55);
-  box-shadow: 0 0 0 4px rgba(217, 119, 87, .12), 0 20px 60px rgba(0, 0, 0, .6);
+  border-radius: 22px; background: #10131a; border: 1px solid color-mix(in srgb, var(--ap-accent) 55%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--ap-accent) 12%, transparent), 0 20px 60px rgba(0, 0, 0, .6);
 }
 .ap-head { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); }
 .ap-logo { color: #d97757; font-size: 16px; }
 .ap-logo.opencode { color: #a78bfa; }
 .ap-logo.codex { color: #67e8f9; }
 .ap-logo.claude { color: #d97757; }
+.ap-logo.antigravity { color: #38bdf8; }
 .ap-sep { color: var(--dim); }
 .ap-context { min-width: 0; display: flex; align-items: baseline; gap: 7px; font-size: 12px; color: var(--muted); }
 #apProject { flex: 0 1 auto; min-width: 0; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-size: 13px; font-weight: 650; }

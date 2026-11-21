@@ -228,6 +228,12 @@ macOS Accessibility permission that survives updates.
   conversation on the phone**, which is off by default (#266,
   [Vasilispapg](https://github.com/Vasilispapg)).
 
+**Antigravity Integration**
+- Non-blocking alerts on phone for interactive choice prompts (`ask_question`) and task finish events (`Stop` hook) via `~/.gemini/config/hooks.json`. Choices remain immediately actionable on PC without waiting.
+- Bottom popup card designed to match the calm page-switch countdown card (`#navCard`) with circular SVG progress ring, remaining seconds indicator, Gemini accent (`#38bdf8`), and quick-dismiss button (`Got it`).
+- High-gain synthesized desk-bell chime powered by Web Audio API with multi-harmonic overtones and dynamic range compression for clear audibility across the room.
+- AI Quotas widget toggle button updated to `🔔 Alerts` / `🔕 Muted`.
+
 **Panel**
 - Less CPU, so a panel on battery lasts longer: the clock's colon, the session status dots, the OBS light, the on-air
   sign, the dictation microphone and the radio equalizer no longer run endless CSS animations, which made the phone

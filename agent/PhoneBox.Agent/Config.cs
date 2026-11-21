@@ -19,6 +19,7 @@ public sealed class AgentConfig
     public LanConfig Lan { get; set; } = new();
     public UpdateConfig Updates { get; set; } = new();
     public ClaudeConfig Claude { get; set; } = new();
+<<<<<<< HEAD
     /// <summary>Cursor agent-transcript sessions on the AI sessions widget (off by default).</summary>
     public CursorConfig Cursor { get; set; } = new();
     /// <summary>Antigravity chats on the AI sessions widget (off by default).</summary>
@@ -26,6 +27,9 @@ public sealed class AgentConfig
     /// <summary>OpenCode prompts and sessions on the phone; everything is off until the settings page turns it on.</summary>
     [JsonPropertyName("opencode")]
     public OpenCodeConfig OpenCode { get; set; } = new();
+=======
+    public AntigravityConfig Antigravity { get; set; } = new();
+>>>>>>> d4d767a (feat: add Antigravity notifications)
     public List<PageConfig> Pages { get; set; } = [];
     public List<Shortcut> Shortcuts { get; set; } = [];
     public List<RuleConfig> Rules { get; set; } = [];
@@ -90,8 +94,13 @@ public sealed class AgentConfig
         // names only (for the Rules widget); what a rule matches on stays here
         rules = Rules.Select(r => new { r.Id, r.Name, r.Enabled, r.When }),
         charge = new { Charge.Enabled, Charge.Min, Charge.Max },
+<<<<<<< HEAD
         // OpenCode prompts: how long the Allow always button waits before it can be pressed (it saves a pattern)
         opencode = new { OpenCode.AlwaysCountdownSec },
+=======
+        claude = new { Claude.PhoneApprovals, Claude.TimeoutSec, Claude.DisableFallbackTimer, Claude.OnlyWhenAway },
+        antigravity = new { Antigravity.PhoneApprovals, Antigravity.TimeoutSec, Antigravity.DisableFallbackTimer, Antigravity.OnlyWhenAway, Antigravity.PlaySound },
+>>>>>>> d4d767a (feat: add Antigravity notifications)
     };
 
     /// <summary>Ending processes is allowed when an enabled page has a processes widget that allows it.</summary>
@@ -249,6 +258,8 @@ public sealed class ClaudeConfig
     /// <summary>Let the phone open a Claude Code session's recent messages and steps, read from its chat file on this
     /// computer. They are your prompts and Claude's replies, so this stays off until you turn it on.</summary>
     public bool ShareConversation { get; set; }
+    /// <summary>Disable PC fallback timer; keeps waiting on the phone without falling back on timeout.</summary>
+    public bool DisableFallbackTimer { get; set; }
     /// <summary>Only use the phone when the PC has been idle for a minute (you are away from the keyboard).</summary>
     public bool OnlyWhenAway { get; set; }
     /// <summary>Show each Claude Code chat's title on the phone. The title is the name you gave the chat or the one
@@ -288,6 +299,20 @@ public sealed class OpenCodeConfig
     /// <summary>Show each OpenCode session's title on the phone. OpenCode draws the titles from the conversation,
     /// so they stay off the phone until you turn this on, like Claude's shareSessionTitles.</summary>
     public bool ShareSessionTitles { get; set; }
+}
+
+public sealed class AntigravityConfig
+{
+    /// <summary>Show Antigravity alerts (choice needed, task finished) on the phone.</summary>
+    public bool PhoneApprovals { get; set; } = true;
+    /// <summary>Notification auto-dismiss duration in seconds (0 = disabled).</summary>
+    public int TimeoutSec { get; set; } = 15;
+    /// <summary>Disable auto-dismiss timer; keep notification on phone until dismissed.</summary>
+    public bool DisableFallbackTimer { get; set; }
+    /// <summary>Only use the phone when the PC has been idle for a minute.</summary>
+    public bool OnlyWhenAway { get; set; }
+    /// <summary>Play sound when notification arrives on phone.</summary>
+    public bool PlaySound { get; set; } = true;
 }
 
 public sealed class PageConfig
@@ -646,6 +671,8 @@ public sealed partial class ConfigStore(string path)
         c.OpenCode ??= new();
         c.OpenCode.TimeoutSec = Math.Clamp(c.OpenCode.TimeoutSec, 10, 3600);
         c.OpenCode.AlwaysCountdownSec = Math.Clamp(c.OpenCode.AlwaysCountdownSec, 0, 60);
+        c.Antigravity ??= new();
+        c.Antigravity.TimeoutSec = Math.Clamp(c.Antigravity.TimeoutSec, 10, 3600);
         if (string.IsNullOrWhiteSpace(c.Updates.Repo)) c.Updates.Repo = "ersinkoc/phonebox";
         c.Lan.Port = Math.Clamp(c.Lan.Port, 1024, 65535);
         if (string.IsNullOrWhiteSpace(c.Lan.Token)) c.Lan.Token = NewToken();

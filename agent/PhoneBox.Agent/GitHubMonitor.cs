@@ -91,18 +91,42 @@ public sealed class GitHubMonitor(ILogger<GitHubMonitor> log) : BackgroundServic
         review, ci,
         DateTimeOffset.TryParse(Str(n, "updatedAt"), out var u) ? u.ToUnixTimeMilliseconds() : 0);
 
+    private static string ResolveGhBinary()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            var pf = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+            var standardPath = Path.Combine(pf, "GitHub CLI", "gh.exe");
+            if (File.Exists(standardPath)) return standardPath;
+
+            var localApp = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            var userPath = Path.Combine(localApp, "Programs", "GitHub CLI", "gh.exe");
+            if (File.Exists(userPath)) return userPath;
+
+            return "gh.exe";
+        }
+        return "gh";
+    }
+
     internal static Task<string> Gh(string[] args, CancellationToken ct)
     {
-        var psi = new ProcessStartInfo("gh");
+        var psi = new ProcessStartInfo(ResolveGhBinary());
         foreach (var a in args) psi.ArgumentList.Add(a);
         return RunGh(psi, ct);
     }
 
     internal static async Task<string> RunGh(ProcessStartInfo psi, CancellationToken ct)
     {
-        var result = await ToolProcess.RunAsync(psi, TimeSpan.FromSeconds(20), ct);
-        if (result.ExitCode != 0) throw new InvalidOperationException("gh: " + result.Error.Trim().Split('\n')[0]);
-        return result.Output;
+        try
+        {
+            var result = await ToolProcess.RunAsync(psi, TimeSpan.FromSeconds(20), ct);
+            if (result.ExitCode != 0) throw new InvalidOperationException("gh: " + result.Error.Trim().Split('\n')[0]);
+            return result.Output;
+        }
+        catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 2)
+        {
+            throw new InvalidOperationException("GitHub CLI (gh) not found on PC. Run 'winget install GitHub.cli' and 'gh auth login'.");
+        }
     }
 
     private static string? Str(JsonElement e, string p) => e.TryGetProperty(p, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
