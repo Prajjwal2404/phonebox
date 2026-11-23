@@ -33,6 +33,20 @@ public class WidgetSoundEditTests
     }
 
     [Fact]
+    public void SetsTheSoundOfStackSessionsChildStringOrArray()
+    {
+        var path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"phonebox-stack-{Guid.NewGuid():N}.json");
+        File.WriteAllText(path, """{"pages":[{"id":"p","title":"P","widgets":[{"id":"st","type":"stack","options":{"widgets":"[{\"id\":\"sub-1\",\"type\":\"sessions\",\"options\":{}}]"}}]}]}""");
+        var cfg = new ConfigStore(path);
+        try
+        {
+            var r = WidgetSoundEdit.Apply(cfg, "p", "st:sub-1", true);
+            Assert.Equal(200, r.Status);
+        }
+        finally { Cleanup(path); }
+    }
+
+    [Fact]
     public void NonSessionsWidgetIsRefused()
     {
         var (cfg, path) = Make();
