@@ -1001,25 +1001,15 @@ function getDeskChimeUri() {
 export function playSessionFinishedSound(force = false) {
   if (!force && nightOn) return;
 
-  let customAudio = '';
+  let chosen = null;
   let hasSessionsWidget = false;
-  let soundEnabled = false;
-
-  const check = (type, opts) => {
-    if (type !== 'sessions') return;
-    hasSessionsWidget = true;
-    if (opts?.sound === true) {
-      soundEnabled = true;
-      if (!customAudio && opts?.customAudio) customAudio = opts.customAudio;
-    } else if (force && !customAudio && opts?.customAudio) {
-      customAudio = opts.customAudio;
-    }
-  };
 
   const inspectWidget = (w, o) => {
     if (!w) return;
     if (w.type === 'sessions') {
-      check(w.type, o ?? w.options);
+      hasSessionsWidget = true;
+      const opts = o ?? w.options;
+      if (!chosen && opts?.sound === true) chosen = opts;
     } else if (w.type === 'stack') {
       let items = (o ?? w.options)?.widgets;
       if (typeof items === 'string') {
@@ -1028,7 +1018,8 @@ export function playSessionFinishedSound(force = false) {
       if (Array.isArray(items)) {
         for (const it of items) {
           if (it && typeof it === 'object' && it.type === 'sessions' && it.enabled !== false) {
-            check(it.type, it.options);
+            hasSessionsWidget = true;
+            if (!chosen && it.options?.sound === true) chosen = it.options;
           }
         }
       }
@@ -1036,15 +1027,36 @@ export function playSessionFinishedSound(force = false) {
   };
 
   for (const m of mounted) inspectWidget(m.ctx?.w, m.ctx?.o);
-  if (!hasSessionsWidget) {
+  if (!chosen) {
     for (const p of (cfg.pages || [])) {
       for (const w of (p.widgets || [])) inspectWidget(w, w.options);
     }
   }
 
-  if (!force && (!hasSessionsWidget || !soundEnabled)) return;
+  if (force && !chosen && hasSessionsWidget) {
+    const pickFirst = (w, o) => {
+      if (chosen || !w) return;
+      if (w.type === 'sessions') chosen = o ?? w.options;
+      else if (w.type === 'stack') {
+        let items = (o ?? w.options)?.widgets;
+        if (typeof items === 'string') { try { items = JSON.parse(items); } catch (_) {} }
+        if (Array.isArray(items)) {
+          const it = items.find((x) => x?.type === 'sessions' && x.enabled !== false);
+          if (it) chosen = it.options;
+        }
+      }
+    };
+    for (const m of mounted) pickFirst(m.ctx?.w, m.ctx?.o);
+    if (!chosen) {
+      for (const p of (cfg.pages || [])) {
+        for (const w of (p.widgets || [])) pickFirst(w, w.options);
+      }
+    }
+  }
 
-  const audioUri = customAudio || getDeskChimeUri();
+  if (!force && !chosen) return;
+
+  const audioUri = chosen?.customAudio || getDeskChimeUri();
   try {
     const a = new Audio(audioUri);
     a.play().catch(() => chime(70, true));

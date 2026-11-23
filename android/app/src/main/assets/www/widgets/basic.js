@@ -666,14 +666,24 @@ W.sessions = {
       const targetSound = pendingSound;
       pendingSound = null;
       try {
-        const mark = configMark();
         const path = '/widget/' + encodeURIComponent(ctx.page.id) + '/' + encodeURIComponent(ctx.w.id)
           + '/sound?sound=' + encodeURIComponent(targetSound) + '&version=' + encodeURIComponent(cfgVersion ?? '');
         const res = await api(path, 'POST', 8000);
+        const mark = configMark();
         if (!configReadSince(mark)) {
           localWriteStored(res?.version);
         }
-      } catch (_) {}
+      } catch (_) {
+        if (pendingSound === null && typeof cfg !== 'undefined') {
+          const p = (cfg.pages || []).find((x) => x.id === ctx.page?.id);
+          const target = (p?.widgets || []).find((x) => x.id === ctx.w?.id);
+          if (target?.options?.sound != null) {
+            ctx.o.sound = target.options.sound;
+            if (ctx.w) ctx.w.options = { ...(ctx.w.options || {}), sound: target.options.sound };
+            updateSoundBtn();
+          }
+        }
+      }
       savingSound = false;
       if (pendingSound !== null) flushSound();
     };
