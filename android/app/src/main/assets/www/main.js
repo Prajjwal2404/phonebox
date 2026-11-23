@@ -998,58 +998,39 @@ function getDeskChimeUri() {
   return deskChimeUri;
 }
 
-export function playSessionFinishedSound(force = false) {
+export function playSessionFinishedSound(force = false, previewOptions = null) {
   if (!force && nightOn) return;
 
-  let chosen = null;
-  let hasSessionsWidget = false;
+  let chosen = previewOptions && force ? previewOptions : null;
+  let hasSessionsWidget = previewOptions != null;
 
-  const inspectWidget = (w, o) => {
-    if (!w) return;
-    if (w.type === 'sessions') {
-      hasSessionsWidget = true;
-      const opts = o ?? w.options;
-      if (!chosen && opts?.sound === true) chosen = opts;
-    } else if (w.type === 'stack') {
-      let items = (o ?? w.options)?.widgets;
-      if (typeof items === 'string') {
-        try { items = JSON.parse(items); } catch (_) {}
-      }
-      if (Array.isArray(items)) {
-        for (const it of items) {
-          if (it && typeof it === 'object' && it.type === 'sessions' && it.enabled !== false) {
-            hasSessionsWidget = true;
-            if (!chosen && it.options?.sound === true) chosen = it.options;
+  if (!chosen) {
+    const inspectWidget = (w, o) => {
+      if (!w) return;
+      if (w.type === 'sessions') {
+        hasSessionsWidget = true;
+        const opts = o ?? w.options;
+        if (!chosen && opts?.sound === true) chosen = opts;
+      } else if (w.type === 'stack') {
+        let items = (o ?? w.options)?.widgets;
+        if (typeof items === 'string') {
+          try { items = JSON.parse(items); } catch (_) {}
+        }
+        if (Array.isArray(items)) {
+          for (const it of items) {
+            if (it && typeof it === 'object' && it.type === 'sessions' && it.enabled !== false) {
+              hasSessionsWidget = true;
+              if (!chosen && it.options?.sound === true) chosen = it.options;
+            }
           }
         }
       }
-    }
-  };
-
-  for (const m of mounted) inspectWidget(m.ctx?.w, m.ctx?.o);
-  if (!chosen) {
-    for (const p of (cfg.pages || [])) {
-      for (const w of (p.widgets || [])) inspectWidget(w, w.options);
-    }
-  }
-
-  if (force && !chosen && hasSessionsWidget) {
-    const pickFirst = (w, o) => {
-      if (chosen || !w) return;
-      if (w.type === 'sessions') chosen = o ?? w.options;
-      else if (w.type === 'stack') {
-        let items = (o ?? w.options)?.widgets;
-        if (typeof items === 'string') { try { items = JSON.parse(items); } catch (_) {} }
-        if (Array.isArray(items)) {
-          const it = items.find((x) => x?.type === 'sessions' && x.enabled !== false);
-          if (it) chosen = it.options;
-        }
-      }
     };
-    for (const m of mounted) pickFirst(m.ctx?.w, m.ctx?.o);
+
+    for (const m of mounted) inspectWidget(m.ctx?.w, m.ctx?.o);
     if (!chosen) {
       for (const p of (cfg.pages || [])) {
-        for (const w of (p.widgets || [])) pickFirst(w, w.options);
+        for (const w of (p.widgets || [])) inspectWidget(w, w.options);
       }
     }
   }

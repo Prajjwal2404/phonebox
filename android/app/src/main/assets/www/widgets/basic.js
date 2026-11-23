@@ -658,8 +658,31 @@ W.sessions = {
       soundBtn.className = 's-sound-btn ' + (muted ? 'muted' : 'on');
       labelled(soundBtn, muted ? tp('Sound alerts off · Tap to turn on') : tp('Sound alerts on · Tap to mute'));
     };
+    let lastAckSound = ctx.o?.sound === true;
     let pendingSound = null;
     let savingSound = false;
+    const updateCfgSound = (val) => {
+      if (typeof cfg === 'undefined' || !cfg?.pages) return;
+      const p = (cfg.pages || []).find((x) => x.id === ctx.page?.id);
+      let target = (p?.widgets || []).find((x) => x.id === ctx.w?.id);
+      if (!target && ctx.w?.id?.includes(':')) {
+        const parts = ctx.w.id.split(':');
+        const stack = (p?.widgets || []).find((x) => x.id === parts[0]);
+        let list = stack?.options?.widgets;
+        if (typeof list === 'string') { try { list = JSON.parse(list); } catch (_) {} }
+        if (Array.isArray(list)) {
+          target = list.find((x) => x.id === parts[1]);
+          if (target) {
+            target.options = { ...(target.options || {}), sound: val };
+            stack.options = stack.options || {};
+            stack.options.widgets = list;
+          }
+        }
+      } else if (target) {
+        target.options = { ...(target.options || {}), sound: val };
+      }
+      store.set('cfg', cfg);
+    };
     const flushSound = async () => {
       if (savingSound || pendingSound === null) return;
       savingSound = true;
@@ -673,15 +696,13 @@ W.sessions = {
         if (!configReadSince(mark)) {
           localWriteStored(res?.version);
         }
+        lastAckSound = targetSound;
       } catch (_) {
-        if (pendingSound === null && typeof cfg !== 'undefined') {
-          const p = (cfg.pages || []).find((x) => x.id === ctx.page?.id);
-          const target = (p?.widgets || []).find((x) => x.id === ctx.w?.id);
-          if (target?.options?.sound != null) {
-            ctx.o.sound = target.options.sound;
-            if (ctx.w) ctx.w.options = { ...(ctx.w.options || {}), sound: target.options.sound };
-            updateSoundBtn();
-          }
+        if (pendingSound === null) {
+          ctx.o.sound = lastAckSound;
+          if (ctx.w) ctx.w.options = { ...(ctx.w.options || {}), sound: lastAckSound };
+          updateCfgSound(lastAckSound);
+          updateSoundBtn();
         }
       }
       savingSound = false;
@@ -697,32 +718,10 @@ W.sessions = {
         ctx.w.options = ctx.w.options || {};
         ctx.w.options.sound = nextSound;
       }
-      if (typeof cfg !== 'undefined' && cfg?.pages) {
-        const p = (cfg.pages || []).find((x) => x.id === ctx.page?.id);
-        let target = (p?.widgets || []).find((x) => x.id === ctx.w?.id);
-        if (!target && ctx.w?.id?.includes(':')) {
-          const parts = ctx.w.id.split(':');
-          const stack = (p?.widgets || []).find((x) => x.id === parts[0]);
-          let list = stack?.options?.widgets;
-          if (typeof list === 'string') { try { list = JSON.parse(list); } catch (_) {} }
-          if (Array.isArray(list)) {
-            target = list.find((x) => x.id === parts[1]);
-            if (target) {
-              target.options = target.options || {};
-              target.options.sound = nextSound;
-              stack.options = stack.options || {};
-              stack.options.widgets = list;
-            }
-          }
-        } else if (target) {
-          target.options = target.options || {};
-          target.options.sound = nextSound;
-        }
-        store.set('cfg', cfg);
-      }
+      updateCfgSound(nextSound);
       updateSoundBtn();
       if (nextSound) {
-        playSessionFinishedSound(true);
+        playSessionFinishedSound(true, ctx.o);
         toast(tp('Session finish sound enabled'), 'ok');
       } else {
         toast(tp('Session finish sound muted'), 'ok');
