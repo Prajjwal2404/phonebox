@@ -1459,10 +1459,28 @@ function sendPreview() {
 function queuePreview() { clearTimeout(previewTimer); previewTimer = setTimeout(sendPreview, 120); }
 
 window.addEventListener('message', (e) => {
-  if (e.origin !== location.origin || e.data?.type !== 'phonebox-preview-ready') return;
-  if (e.source === previewFrame?.contentWindow) previewReady = true;
-  if (e.source === appearancePreviewFrame?.contentWindow) appearancePreviewReady = true;
-  sendPreview();
+  if (e.origin !== location.origin) return;
+  if (e.data?.type === 'phonebox-preview-ready') {
+    if (e.source === previewFrame?.contentWindow) previewReady = true;
+    if (e.source === appearancePreviewFrame?.contentWindow) appearancePreviewReady = true;
+    sendPreview();
+    return;
+  }
+  if (e.data?.type === 'phonebox-widget-option') {
+    const { pageId, widgetId, key, value } = e.data;
+    const p = (cfg.pages || []).find((x) => x.id === pageId);
+    let target = (p?.widgets || []).find((x) => x.id === widgetId);
+    if (!target && widgetId?.includes(':')) {
+      const parts = widgetId.split(':');
+      const stack = (p?.widgets || []).find((x) => x.id === parts[0]);
+      const list = getStackItems(stack, {});
+      target = list.find((x) => x.id === parts[1]);
+    }
+    if (target) {
+      setWOpt(target, key, value);
+      if (selWidget >= 0) renderInspector();
+    }
+  }
 });
 for (const b of $('stageSeg').children) b.onclick = () => setStage(b.dataset.v);
 setStage(stageMode);
@@ -1801,6 +1819,61 @@ function renderStackWidgetsOption(w, o) {
   );
 }
 
+let deskChimeUri = null;
+function getDeskChimeUri() {
+  if (deskChimeUri) return deskChimeUri;
+  const sampleRate = 22050, duration = 0.9, totalSamples = Math.floor(sampleRate * duration);
+  const buffer = new ArrayBuffer(44 + totalSamples * 2);
+  const view = new DataView(buffer);
+  view.setUint32(0, 0x52494646, false); // "RIFF"
+  view.setUint32(4, 36 + totalSamples * 2, true);
+  view.setUint32(8, 0x57415645, false); // "WAVE"
+  view.setUint32(12, 0x666d7420, false); // "fmt "
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, 1, true); // Mono
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  view.setUint32(36, 0x64617461, false); // "data"
+  view.setUint32(40, totalSamples * 2, true);
+
+  const bells = [
+    { freq: 1046.5, start: 0.0, dur: 0.45 },
+    { freq: 1318.5, start: 0.12, dur: 0.50 },
+    { freq: 2093.0, start: 0.25, dur: 0.65 }
+  ];
+  for (let i = 0; i < totalSamples; i++) {
+    const t = i / sampleRate;
+    let sample = 0;
+    for (const b of bells) {
+      if (t >= b.start && t < b.start + b.dur) {
+        const dt = t - b.start;
+        const env = Math.exp(-dt * 7);
+        const wave = Math.sin(2 * Math.PI * b.freq * dt) * 0.5 +
+                     Math.sin(2 * Math.PI * b.freq * 2 * dt) * 0.3 +
+                     Math.sin(2 * Math.PI * b.freq * 3 * dt) * 0.15;
+        sample += wave * env;
+      }
+    }
+    sample = Math.max(-1, Math.min(1, sample * 0.8));
+    view.setInt16(44 + i * 2, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+  }
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+  deskChimeUri = 'data:audio/wav;base64,' + btoa(binary);
+  return deskChimeUri;
+}
+
+function playDeskChime() {
+  try {
+    const a = new Audio(getDeskChimeUri());
+    a.play().catch(() => {});
+  } catch (_) {}
+}
+
 function optionField(w, o, onValChange) {
   if (o.type === 'stack-widgets' || (w.type === 'stack' && o.key === 'widgets')) {
     return renderStackWidgetsOption(w, o);
@@ -1817,8 +1890,9 @@ function optionField(w, o, onValChange) {
         // A Home Assistant widget without the key switches nothing (the agent and the phone read it as off), so show it unchecked;
         // its rows that follow this box are drawn again when it changes.
         const haFlag = w.type === 'ha' && o.key === 'control';
+        const drives = widgetDef(w.type)?.options?.some((x) => x.showWhen?.key === o.key);
         return h('label', { class: 'check', style: { marginBottom: '10px' } }, h('input', { type: 'checkbox', checked: haFlag ? w.options?.control === true : v !== false,
-          onchange: (e) => { set(o.key, e.target.checked); if (haFlag) renderInspector(); } }), o.label);
+          onchange: (e) => { set(o.key, e.target.checked); if (haFlag || drives) renderInspector(); } }), o.label);
       }
     case 'select': {
       // the options that depend on this one are drawn again when it changes
@@ -1942,6 +2016,60 @@ function optionField(w, o, onValChange) {
       return field(h('div', { class: 'opts' }, ...cfg.shortcuts.map((s) => h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: cur().includes(s.id), onchange: (e) => {
         set(o.key, cfg.shortcuts.map((x) => x.id).filter((id) => (id === s.id ? e.target.checked : cur().includes(id))));
       } }), rich(`${s.icon} ${s.label || s.id}`)))));
+    }
+    case 'audio': {
+      const cur = v || '';
+      const fileInput = h('input', {
+        type: 'file',
+        accept: 'audio/*',
+        style: { display: 'none' },
+        onchange: (e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          if (file.size > 500 * 1024) {
+            toast('Audio file must be under 500 KB', true);
+            return;
+          }
+          const reader = new FileReader();
+          reader.onload = () => {
+            set(o.key, reader.result);
+            renderInspector();
+          };
+          reader.readAsDataURL(file);
+        }
+      });
+      const playBtn = h('button', {
+        class: 'btn sm',
+        type: 'button',
+        onclick: () => {
+          if (cur) {
+            try { new Audio(cur).play(); } catch (_) {}
+          } else {
+            playDeskChime();
+          }
+        }
+      }, cur ? 'Test custom sound' : 'Test default chime');
+      const uploadBtn = h('button', {
+        class: 'btn sm',
+        type: 'button',
+        onclick: () => fileInput.click()
+      }, cur ? 'Change audio…' : 'Upload custom audio…');
+      const resetBtn = cur ? h('button', {
+        class: 'btn sm danger',
+        type: 'button',
+        onclick: () => {
+          set(o.key, '');
+          renderInspector();
+        }
+      }, 'Reset') : null;
+      const hint = h('span', { class: 'hint', style: { display: 'block', marginTop: '4px' } },
+        cur ? 'Custom audio loaded' : 'Plays built-in metallic desk chime if no file uploaded');
+      return field(
+        fileInput,
+        h('div', { class: 'row', style: { gap: '6px', flexWrap: 'wrap', alignItems: 'center' } },
+          uploadBtn, playBtn, ...(resetBtn ? [resetBtn] : [])),
+        hint
+      );
     }
     default:
       return field(h('input', { type: 'text', value: v ?? '', oninput: (e) => set(o.key, e.target.value) }),

@@ -528,6 +528,13 @@ body.offline .offline-msg { display: flex; }
 .w-sessions, .w-github { padding: 10px 12px; display: flex; flex-direction: column; }
 .w-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; min-width: 0; }
 .w-sum { font-size: 11.5px; color: var(--muted); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.s-sound-btn { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0; margin-left: auto; background: transparent; border: 0; color: var(--muted); cursor: pointer; border-radius: 6px; transition: color .15s ease, background .15s ease; touch-action: manipulation; }
+.s-sound-btn:hover { color: var(--text); background: rgba(255, 255, 255, .06); }
+.s-sound-btn.on { color: var(--c, #d97757); opacity: 1; }
+.s-sound-btn.on:hover { color: var(--c, #d97757); background: rgba(217, 119, 87, .12); }
+.s-sound-btn.muted { color: var(--muted); opacity: .45; }
+.s-sound-btn.muted:hover { color: var(--text); opacity: .8; background: rgba(255, 255, 255, .06); }
+.s-sound-btn .ico { width: 14px; height: 14px; pointer-events: none; }
 .s-list { flex: 1; display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); grid-auto-rows: 44px; gap: 6px 8px; overflow-y: auto; align-content: start; }
 .sess { display: flex; align-items: center; gap: 8px; padding: 0 10px; border-radius: 10px; background: rgba(255, 255, 255, .035); border: 1px solid transparent; min-width: 0; color: var(--text); font: inherit; text-align: start; cursor: pointer; }
 .sess:focus-visible { outline: 2px solid var(--accent); }
