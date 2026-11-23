@@ -658,6 +658,25 @@ W.sessions = {
       soundBtn.className = 's-sound-btn ' + (muted ? 'muted' : 'on');
       labelled(soundBtn, muted ? tp('Sound alerts off · Tap to turn on') : tp('Sound alerts on · Tap to mute'));
     };
+    let pendingSound = null;
+    let savingSound = false;
+    const flushSound = async () => {
+      if (savingSound || pendingSound === null) return;
+      savingSound = true;
+      const targetSound = pendingSound;
+      pendingSound = null;
+      try {
+        const mark = configMark();
+        const path = '/widget/' + encodeURIComponent(ctx.page.id) + '/' + encodeURIComponent(ctx.w.id)
+          + '/sound?sound=' + encodeURIComponent(targetSound) + '&version=' + encodeURIComponent(cfgVersion ?? '');
+        const res = await api(path, 'POST', 8000);
+        if (!configReadSince(mark)) {
+          localWriteStored(res?.version);
+        }
+      } catch (_) {}
+      savingSound = false;
+      if (pendingSound !== null) flushSound();
+    };
     soundBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
       e.preventDefault();
@@ -674,9 +693,18 @@ W.sessions = {
         if (!target && ctx.w?.id?.includes(':')) {
           const parts = ctx.w.id.split(':');
           const stack = (p?.widgets || []).find((x) => x.id === parts[0]);
-          target = (stack?.options?.widgets || []).find((x) => x.id === parts[1]);
-        }
-        if (target) {
+          let list = stack?.options?.widgets;
+          if (typeof list === 'string') { try { list = JSON.parse(list); } catch (_) {} }
+          if (Array.isArray(list)) {
+            target = list.find((x) => x.id === parts[1]);
+            if (target) {
+              target.options = target.options || {};
+              target.options.sound = nextSound;
+              stack.options = stack.options || {};
+              stack.options.widgets = list;
+            }
+          }
+        } else if (target) {
           target.options = target.options || {};
           target.options.sound = nextSound;
         }
@@ -698,15 +726,8 @@ W.sessions = {
           value: nextSound
         }, location.origin);
       } else if (ctx.page?.id && ctx.w?.id) {
-        try {
-          const mark = configMark();
-          const path = '/widget/' + encodeURIComponent(ctx.page.id) + '/' + encodeURIComponent(ctx.w.id)
-            + '/sound?sound=' + encodeURIComponent(nextSound) + '&version=' + encodeURIComponent(cfgVersion ?? '');
-          const res = await api(path, 'POST', 8000);
-          if (!configReadSince(mark)) {
-            localWriteStored(res?.version);
-          }
-        } catch (_) {}
+        pendingSound = nextSound;
+        flushSound();
       }
     });
     updateSoundBtn();

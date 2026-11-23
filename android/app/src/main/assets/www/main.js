@@ -1008,14 +1008,37 @@ export function playSessionFinishedSound(force = false) {
   const check = (type, opts) => {
     if (type !== 'sessions') return;
     hasSessionsWidget = true;
-    if (opts?.sound === true) soundEnabled = true;
-    if (opts?.customAudio) customAudio = opts.customAudio;
+    if (opts?.sound === true) {
+      soundEnabled = true;
+      if (!customAudio && opts?.customAudio) customAudio = opts.customAudio;
+    } else if (force && !customAudio && opts?.customAudio) {
+      customAudio = opts.customAudio;
+    }
   };
 
-  for (const m of mounted) check(m.ctx?.w?.type, m.ctx?.o);
+  const inspectWidget = (w, o) => {
+    if (!w) return;
+    if (w.type === 'sessions') {
+      check(w.type, o ?? w.options);
+    } else if (w.type === 'stack') {
+      let items = (o ?? w.options)?.widgets;
+      if (typeof items === 'string') {
+        try { items = JSON.parse(items); } catch (_) {}
+      }
+      if (Array.isArray(items)) {
+        for (const it of items) {
+          if (it && typeof it === 'object' && it.type === 'sessions' && it.enabled !== false) {
+            check(it.type, it.options);
+          }
+        }
+      }
+    }
+  };
+
+  for (const m of mounted) inspectWidget(m.ctx?.w, m.ctx?.o);
   if (!hasSessionsWidget) {
     for (const p of (cfg.pages || [])) {
-      for (const w of (p.widgets || [])) check(w.type, w.options);
+      for (const w of (p.widgets || [])) inspectWidget(w, w.options);
     }
   }
 

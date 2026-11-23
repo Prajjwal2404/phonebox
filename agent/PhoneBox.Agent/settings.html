@@ -1473,10 +1473,17 @@ window.addEventListener('message', (e) => {
     if (!target && widgetId?.includes(':')) {
       const parts = widgetId.split(':');
       const stack = (p?.widgets || []).find((x) => x.id === parts[0]);
-      const list = getStackItems(stack, {});
-      target = list.find((x) => x.id === parts[1]);
-    }
-    if (target) {
+      if (stack) {
+        const d = widgetDef('stack');
+        const list = getStackItems(stack, { key: 'widgets', default: d?.options?.find((x) => x.key === 'widgets')?.default });
+        const card = list.find((x) => x.id === parts[1]);
+        if (card) {
+          card.options = { ...(card.options || {}), [key]: value };
+          setWOpt(stack, 'widgets', list.map((it) => ({ id: it.id, type: it.type, enabled: it.enabled !== false, options: it.options || {} })));
+          if (selWidget >= 0) renderInspector();
+        }
+      }
+    } else if (target) {
       setWOpt(target, key, value);
       if (selWidget >= 0) renderInspector();
     }

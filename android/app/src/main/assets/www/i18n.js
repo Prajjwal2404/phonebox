@@ -11530,6 +11530,10 @@
   // entry, so a language can be filled in here without touching the widgets.
   const PANEL = {
     'pt-BR': {
+      "Sound alerts off \u00b7 Tap to turn on": "Alertas sonoros desativados \u00b7 Toque para ativar",
+      "Sound alerts on \u00b7 Tap to mute": "Alertas sonoros ativados \u00b7 Toque para silenciar",
+      "Session finish sound enabled": "Som de t\u00e9rmino de sess\u00e3o ativado",
+      "Session finish sound muted": "Som de t\u00e9rmino de sess\u00e3o silenciado",
       // Control Deck buttons, trackpad hint, moon phases and GPU chips
       'Hold: sleep': 'Segure: repouso',
       'Hold: restart': 'Segure: reiniciar',
