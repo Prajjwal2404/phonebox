@@ -411,6 +411,8 @@ window.PhoneBoxLocaleData = Object.assign(window.PhoneBoxLocaleData || {}, {
       "s.display.showSeconds": "घड़ी पर सेकण्ड दिखाएँ",
       "s.display.vibrate": "जब सत्र समाप्त हो या इनपुट की आवश्यकता हो तो शोर करें",
       "s.display.finishToast": "जब सत्र समाप्त हो तो संदेश दिखाएँ",
+      "s.display.finishSound": "जब सत्र समाप्त हो तो ध्वनि बजाएँ",
+      "s.display.finishSoundVolume": "ध्वनि आवाज़ (फोन के मीडिया आवाज़ का%)",
       "s.display.volumeKeys": "फोन की आवाज़ कुंजी पृष्ठ स्विच करें",
       "s.display.autoBrightness": "चमकीलापन कमरे को फॉलो करता है (प्रकाश सेंसर)",
       "s.display.nightWhenDark": "जब भी कमरे में अंधेरा हो तो रात्रि स्क्रीन दिखाएँ",

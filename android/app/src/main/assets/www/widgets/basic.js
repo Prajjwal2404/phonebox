@@ -1,4 +1,4 @@
-import { $, API, D, LEVEL_COLOR, LOCALE, mediaHtml, METRICS, PANEL_HEADERS, PREVIEW, Q_STYLE, S_ORDER, ago, api, averageColor, buildLayout, buzz, cfg, chime, cfgVersion, chart, color, cssVar, currentProcessesSort, emit, fillIcon, fmtClock, fmtDur, fmtHM, fmtMem, fmtReset, fmtTime, fmtValue, gotoProcesses, gpuMem, gpusOf, h, en, haptic, hasProcessesPage, hist, hour12, icon, keyButton, setKeyFace, labelled, levelOf, media, metricText, online, openSheet, paceInfo, pad, playSessionFinishedSound, prRow, pushView, quotaProviders, r1, registerProcessesSorter, renderStatus, ringSvg, setArtColor, configMark, configReadSince, localWriteStored, setMediaState, setVolDragging, shortDur, shortGpu, store, t, tick, toast, volDragging, wxBlock, wxDeg, wxIcon, emo, rich, tp, tpv, quotaText, pages, curPage, gotoPageRef } from '../main.js';
+import { $, API, D, LEVEL_COLOR, LOCALE, mediaHtml, METRICS, PANEL_HEADERS, PREVIEW, Q_STYLE, S_ORDER, ago, api, averageColor, buildLayout, buzz, cfg, chime, cfgVersion, chart, color, cssVar, currentProcessesSort, emit, fillIcon, fmtClock, fmtDur, fmtHM, fmtMem, fmtReset, fmtTime, fmtValue, gotoProcesses, gpuMem, gpusOf, h, en, haptic, hasProcessesPage, hist, hour12, icon, keyButton, setKeyFace, labelled, levelOf, media, metricText, online, openSheet, paceInfo, pad, prRow, pushView, quotaProviders, r1, registerProcessesSorter, renderStatus, ringSvg, setArtColor, configMark, configReadSince, localWriteStored, setMediaState, setVolDragging, shortDur, shortGpu, store, t, tick, toast, volDragging, wxBlock, wxDeg, wxIcon, emo, rich, tp, tpv, quotaText, pages, curPage, gotoPageRef } from '../main.js';
 import { W } from '../registry.js';
 import { invalidateDeckState } from './controls.js';
 
@@ -646,101 +646,10 @@ W.codexbar = W.quotas;
 
 W.sessions = {
   needs: ['work', 'tick'],
-  create(box, ctx) {
+  create(box) {
     const sum = h('span', 'w-sum');
     const list = h('div', 's-list', h('div', 'empty', t('sess.waitingData')));
-    const isMuted = () => ctx.o?.sound !== true;
-    const soundBtn = h('button', 's-sound-btn');
-    soundBtn.type = 'button';
-    const updateSoundBtn = () => {
-      const muted = isMuted();
-      soundBtn.replaceChildren(icon(muted ? 'bell-off' : 'bell'));
-      soundBtn.className = 's-sound-btn ' + (muted ? 'muted' : 'on');
-      labelled(soundBtn, muted ? tp('Sound alerts off · Tap to turn on') : tp('Sound alerts on · Tap to mute'));
-    };
-    let lastAckSound = ctx.o?.sound === true;
-    let pendingSound = null;
-    let savingSound = false;
-    const updateCfgSound = (val) => {
-      if (typeof cfg === 'undefined' || !cfg?.pages) return;
-      const p = (cfg.pages || []).find((x) => x.id === ctx.page?.id);
-      let target = (p?.widgets || []).find((x) => x.id === ctx.w?.id);
-      if (!target && ctx.w?.id?.includes(':')) {
-        const parts = ctx.w.id.split(':');
-        const stack = (p?.widgets || []).find((x) => x.id === parts[0]);
-        let list = stack?.options?.widgets;
-        if (typeof list === 'string') { try { list = JSON.parse(list); } catch (_) {} }
-        if (Array.isArray(list)) {
-          target = list.find((x) => x.id === parts[1]);
-          if (target) {
-            target.options = { ...(target.options || {}), sound: val };
-            stack.options = stack.options || {};
-            stack.options.widgets = list;
-          }
-        }
-      } else if (target) {
-        target.options = { ...(target.options || {}), sound: val };
-      }
-      store.set('cfg', cfg);
-    };
-    const flushSound = async () => {
-      if (savingSound || pendingSound === null) return;
-      savingSound = true;
-      const targetSound = pendingSound;
-      pendingSound = null;
-      try {
-        const path = '/widget/' + encodeURIComponent(ctx.page.id) + '/' + encodeURIComponent(ctx.w.id)
-          + '/sound?sound=' + encodeURIComponent(targetSound) + '&version=' + encodeURIComponent(cfgVersion ?? '');
-        const res = await api(path, 'POST', 8000);
-        const mark = configMark();
-        if (!configReadSince(mark)) {
-          localWriteStored(res?.version);
-        }
-        lastAckSound = targetSound;
-      } catch (_) {
-        if (pendingSound === null) {
-          ctx.o.sound = lastAckSound;
-          if (ctx.w) ctx.w.options = { ...(ctx.w.options || {}), sound: lastAckSound };
-          updateCfgSound(lastAckSound);
-          updateSoundBtn();
-        }
-      }
-      savingSound = false;
-      if (pendingSound !== null) flushSound();
-    };
-    soundBtn.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      e.preventDefault();
-      haptic();
-      const nextSound = isMuted();
-      ctx.o.sound = nextSound;
-      if (ctx.w) {
-        ctx.w.options = ctx.w.options || {};
-        ctx.w.options.sound = nextSound;
-      }
-      updateCfgSound(nextSound);
-      updateSoundBtn();
-      if (nextSound) {
-        playSessionFinishedSound(true, ctx.o);
-        toast(tp('Session finish sound enabled'), 'ok');
-      } else {
-        toast(tp('Session finish sound muted'), 'ok');
-      }
-      if (PREVIEW) {
-        window.parent?.postMessage({
-          type: 'phonebox-widget-option',
-          pageId: ctx.page?.id,
-          widgetId: ctx.w?.id,
-          key: 'sound',
-          value: nextSound
-        }, location.origin);
-      } else if (ctx.page?.id && ctx.w?.id) {
-        pendingSound = nextSound;
-        flushSound();
-      }
-    });
-    updateSoundBtn();
-    box.append(h('div', 'w-head', h('span', 's-label', t('w.sessions')), sum, soundBtn), list);
+    box.append(h('div', 'w-head', h('span', 's-label', t('w.sessions')), sum), list);
     box.style.setProperty('--c', '#d97757');
     const tokens = (n) => n == null ? '—' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(n);
     const statusText = (s) => s.status === 'busy' ? t('sess.working') : s.status === 'waiting' ? t('sess.waiting') : s.status === 'shell' ? t('sess.shell') : s.outcome === 'completed' ? t('sess.completed') : s.outcome === 'failed' ? t('sess.failed') : s.outcome === 'aborted' ? t('sess.aborted') : t('sess.idle');
@@ -866,7 +775,6 @@ W.sessions = {
     };
     return {
       update() {
-        updateSoundBtn();
         const sessions = D.work?.sessions;
         if (!sessions) return;
         const counts = { waiting: 0, busy: 0, shell: 0, idle: 0 };

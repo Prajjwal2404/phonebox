@@ -176,6 +176,10 @@ public sealed class DisplayConfig
     public bool Vibrate { get; set; } = true;
     /// <summary>Show a message when a session finishes. The "needs input" message always shows.</summary>
     public bool FinishToast { get; set; } = true;
+    /// <summary>Play a chime when a session finishes.</summary>
+    public bool FinishSound { get; set; }
+    /// <summary>Sound volume (% of the phone's media volume).</summary>
+    public int FinishSoundVolume { get; set; } = 70;
     /// <summary>The phone's volume keys switch pages.</summary>
     public bool VolumeKeys { get; set; } = true;
     /// <summary>landscape, portrait or auto (follow the phone). In portrait the widgets are arranged automatically.</summary>

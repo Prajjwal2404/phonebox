@@ -411,6 +411,8 @@ window.PhoneBoxLocaleData = Object.assign(window.PhoneBoxLocaleData || {}, {
       "s.display.showSeconds": "Zobrazení sekund na hodinách",
       "s.display.vibrate": "Vibrace, když relace končí nebo potřebuje vstup",
       "s.display.finishToast": "Zobrazit zprávu při ukončení relace",
+      "s.display.finishSound": "Zvuk při ukončení relace",
+      "s.display.finishSoundVolume": "Hlasitost zvuku (% hlasitosti médií v telefonu)",
       "s.display.volumeKeys": "Hlasitými klávesami telefonu přepnete stránky",
       "s.display.autoBrightness": "Jas sleduje místnost (světelný senzor)",
       "s.display.nightWhenDark": "Zobrazit noční obrazovku, kdykoli je místnost tmavá",

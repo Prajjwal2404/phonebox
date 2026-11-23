@@ -411,6 +411,8 @@ window.PhoneBoxLocaleData = Object.assign(window.PhoneBoxLocaleData || {}, {
       "s.display.showSeconds": "Tampilkan detik pada jam",
       "s.display.vibrate": "Berikan getaran ketika sesi berakhir atau memerlukan masukan",
       "s.display.finishToast": "Tampilkan pesan ketika sesi berakhir",
+      "s.display.finishSound": "Suara ketika sesi berakhir",
+      "s.display.finishSoundVolume": "Volume suara (% dari volume media telepon)",
       "s.display.volumeKeys": "Tombol volume telepon untuk mengganti halaman",
       "s.display.autoBrightness": "Kecerahan mengikuti ruangan (sensor cahaya)",
       "s.display.nightWhenDark": "Tampilkan layar malam ketika ruangan gelap",

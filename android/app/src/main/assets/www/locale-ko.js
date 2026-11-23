@@ -411,6 +411,8 @@ window.PhoneBoxLocaleData = Object.assign(window.PhoneBoxLocaleData || {}, {
       "s.display.showSeconds": "시계에 초 보이기",
       "s.display.vibrate": "세션이 끝나거나 입력이 필요할 때 진동",
       "s.display.finishToast": "세션이 끝날 때 메시지 보이기",
+      "s.display.finishSound": "세션이 끝날 때 소리 재생",
+      "s.display.finishSoundVolume": "사운드 볼륨(휴대폰 미디어 볼륨의 %)",
       "s.display.volumeKeys": "휴대폰의 볼륨 키로 페이지 전환",
       "s.display.autoBrightness": "밝기가 방을 따라갑니다(광센서)",
       "s.display.nightWhenDark": "방이 어두울 때마다 야간 화면 보기",

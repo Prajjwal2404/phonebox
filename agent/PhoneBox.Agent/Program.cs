@@ -479,22 +479,6 @@ app.MapPost("/api/widget/{pageId}/{widgetId}/note", (string pageId, string widge
     };
 });
 
-app.MapPost("/api/widget/{pageId}/{widgetId}/sound", (string pageId, string widgetId, string? sound, string? enabled, string? version, ConfigStore cfg) =>
-{
-    long? expected = long.TryParse(version, out var v) ? v : null;
-    var raw = sound ?? enabled ?? "true";
-    var state = raw == "1" || raw.Equals("true", StringComparison.OrdinalIgnoreCase);
-    WidgetSoundEdit.Result r;
-    lock (IconCommit) r = WidgetSoundEdit.Apply(cfg, pageId, widgetId, state, expected);
-    return r.Status switch
-    {
-        200 => Results.Ok(new { version = r.Version }),
-        404 => Results.NotFound(new { error = r.Error }),
-        409 => Results.Json(new { error = r.Error }, statusCode: StatusCodes.Status409Conflict),
-        _ => Results.BadRequest(new { error = r.Error }),
-    };
-});
-
 // The phone's other narrow write: a Discord widget's favourite servers and voice channels. Only an id the agent itself
 // reported, only into that widget's two lists (DiscordFavorites). Query string only, like the note above.
 app.MapPost("/api/widget/{pageId}/{widgetId}/discord-favorite", (string pageId, string widgetId, string? kind, string? id, bool? on, string? version, ConfigStore cfg, DiscordMonitor dc) =>

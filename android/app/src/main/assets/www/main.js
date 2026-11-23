@@ -76,7 +76,7 @@ export const FALLBACK_PAGES = [{
 export const DEFAULT_CFG = {
   weather: { city: 'Tallinn', lat: 59.437, lon: 24.745, unit: 'celsius', model: '' },
   night: { enabled: true, start: '00:30', end: '07:30', brightness: 0.02 },
-  display: { showSeconds: true, idleReturnSec: 90, vibrate: true, finishToast: true, volumeKeys: true, nightWhenUnreachable: false, unreachableNightDelayMin: 5, pageBar: 'dots', pageBarSide: 'bottom' },
+  display: { showSeconds: true, idleReturnSec: 90, vibrate: true, finishToast: true, finishSound: false, finishSoundVolume: 70, volumeKeys: true, nightWhenUnreachable: false, unreachableNightDelayMin: 5, pageBar: 'dots', pageBarSide: 'bottom' },
   opencode: { alwaysCountdownSec: 10 },
   pages: FALLBACK_PAGES,
   shortcuts: [],
@@ -950,104 +950,9 @@ export const S_ORDER = { waiting: 0, busy: 1, shell: 2, idle: 3 };
 export const prevStatus = new Map();
 export let workLoaded = false;
 
-let deskChimeUri = null;
-function getDeskChimeUri() {
-  if (deskChimeUri) return deskChimeUri;
-  const sampleRate = 22050, duration = 0.9, totalSamples = Math.floor(sampleRate * duration);
-  const buffer = new ArrayBuffer(44 + totalSamples * 2);
-  const view = new DataView(buffer);
-  view.setUint32(0, 0x52494646, false); // "RIFF"
-  view.setUint32(4, 36 + totalSamples * 2, true);
-  view.setUint32(8, 0x57415645, false); // "WAVE"
-  view.setUint32(12, 0x666d7420, false); // "fmt "
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true); // PCM
-  view.setUint16(22, 1, true); // Mono
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * 2, true);
-  view.setUint16(32, 2, true);
-  view.setUint16(34, 16, true);
-  view.setUint32(36, 0x64617461, false); // "data"
-  view.setUint32(40, totalSamples * 2, true);
-
-  const bells = [
-    { freq: 1046.5, start: 0.0, dur: 0.45 },
-    { freq: 1318.5, start: 0.12, dur: 0.50 },
-    { freq: 2093.0, start: 0.25, dur: 0.65 }
-  ];
-  for (let i = 0; i < totalSamples; i++) {
-    const t = i / sampleRate;
-    let sample = 0;
-    for (const b of bells) {
-      if (t >= b.start && t < b.start + b.dur) {
-        const dt = t - b.start;
-        const env = Math.exp(-dt * 7);
-        const wave = Math.sin(2 * Math.PI * b.freq * dt) * 0.5 +
-                     Math.sin(2 * Math.PI * b.freq * 2 * dt) * 0.3 +
-                     Math.sin(2 * Math.PI * b.freq * 3 * dt) * 0.15;
-        sample += wave * env;
-      }
-    }
-    sample = Math.max(-1, Math.min(1, sample * 0.8));
-    view.setInt16(44 + i * 2, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
-  }
-  let binary = '';
-  const bytes = new Uint8Array(buffer);
-  for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
-  deskChimeUri = 'data:audio/wav;base64,' + btoa(binary);
-  return deskChimeUri;
-}
-
-export function playSessionFinishedSound(force = false, previewOptions = null) {
-  if (!force && nightOn) return;
-
-  let chosen = previewOptions && force ? previewOptions : null;
-  let hasSessionsWidget = previewOptions != null;
-
-  if (!chosen) {
-    const inspectWidget = (w, o) => {
-      if (!w) return;
-      if (w.type === 'sessions') {
-        hasSessionsWidget = true;
-        const opts = o ?? w.options;
-        if (!chosen && opts?.sound === true) chosen = opts;
-      } else if (w.type === 'stack') {
-        let items = (o ?? w.options)?.widgets;
-        if (typeof items === 'string') {
-          try { items = JSON.parse(items); } catch (_) {}
-        }
-        if (Array.isArray(items)) {
-          for (const it of items) {
-            if (it && typeof it === 'object' && it.type === 'sessions' && it.enabled !== false) {
-              hasSessionsWidget = true;
-              if (!chosen && it.options?.sound === true) chosen = it.options;
-            }
-          }
-        }
-      }
-    };
-
-    for (const m of mounted) inspectWidget(m.ctx?.w, m.ctx?.o);
-    if (!chosen) {
-      for (const p of (cfg.pages || [])) {
-        for (const w of (p.widgets || [])) inspectWidget(w, w.options);
-      }
-    }
-  }
-
-  if (!force && !chosen) return;
-
-  const audioUri = chosen?.customAudio || getDeskChimeUri();
-  try {
-    const a = new Audio(audioUri);
-    a.play().catch(() => chime(70, true));
-  } catch (_) {
-    chime(70, true);
-  }
-}
-
 /** Vibrates and shows a toast when a session finishes or starts waiting for input; the finish toast can be turned off. */
 export function notifyTransitions(sessions) {
+  let finished = 0;
   for (const s of sessions) {
     const before = prevStatus.get(s.id);
     if (workLoaded && before && before !== s.status) {
@@ -1057,11 +962,12 @@ export function notifyTransitions(sessions) {
       } else if (s.status === 'idle' && (before === 'busy' || before === 'shell')) {
         buzz('0,70,110,70');
         if (cfg.display?.finishToast !== false) toast(t('panel.sessionFinished', { name: s.name }), 'ok');
-        playSessionFinishedSound();
+        finished++;
       }
     }
     prevStatus.set(s.id, s.status);
   }
+  if (finished > 0 && cfg.display?.finishSound) chime(cfg.display.finishSoundVolume ?? 70, true);
   workLoaded = true;
 }
 

@@ -411,6 +411,8 @@ window.PhoneBoxLocaleData = Object.assign(window.PhoneBoxLocaleData || {}, {
       "s.display.showSeconds": "أظهر الثواني على الساعة",
       "s.display.vibrate": "اهتز عندما تنتهي الجلسة أو تحتاج إلى مدخلات",
       "s.display.finishToast": "أظهر رسالة عند انتهاء الجلسة",
+      "s.display.finishSound": "صوت عند انتهاء الجلسة",
+      "s.display.finishSoundVolume": "حجم الصوت (% من حجم الهاتف)",
       "s.display.volumeKeys": "مفاتيح الصوت في الهاتف تنقل الصفحات",
       "s.display.autoBrightness": "السطوع يتبع الغرفة (جهاز استشعار الضوء)",
       "s.display.nightWhenDark": "عرض الشاشة الليلية عندما تكون الغرفة مظلمة",

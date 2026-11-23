@@ -36,9 +36,7 @@ public sealed partial class SystemMonitor(ILogger<SystemMonitor> log, ConfigStor
     // GPU sources, highest priority first: nvidia-smi, LibreHardwareMonitor, the OS (D3DKMT + counters / sysfs / ioreg)
     private volatile IReadOnlyList<GpuInfo>? _nvidia, _lhmGpus, _osGpus;
     private double? _cpuTemp;
-#pragma warning disable CS0649 // Assigned on macOS via AppleSmc
     private double? _appleGpuTemp; // macOS: the GPU's temperature from the SMC, added to the ioreg GPU
-#pragma warning restore CS0649
     private IReadOnlyList<DiskInfo> _disks = [];
 
     public PcSnapshot? Snapshot() => _snap;

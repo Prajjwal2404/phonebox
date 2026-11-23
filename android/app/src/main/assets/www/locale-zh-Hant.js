@@ -411,6 +411,8 @@ window.PhoneBoxLocaleData = Object.assign(window.PhoneBoxLocaleData || {}, {
       "s.display.showSeconds": "顯示時鐘上的秒數",
       "s.display.vibrate": "會話結束或需要輸入時振動",
       "s.display.finishToast": "會話結束時顯示消息",
+      "s.display.finishSound": "會話結束時播放提示音",
+      "s.display.finishSoundVolume": "音量 (占手機媒體音量的百分比)",
       "s.display.volumeKeys": "電話的音量鍵可以切換頁面",
       "s.display.autoBrightness": "亮度跟著房間的變化 ( 光線感應器 )",
       "s.display.nightWhenDark": "當房間黑暗時顯示夜幕屏幕",
