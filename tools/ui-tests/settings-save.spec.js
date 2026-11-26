@@ -151,10 +151,16 @@ test('a widget option that needs another is shown only while that one is on', as
   const inspector = page.locator('#inspector');
   const ticks = inspector.getByText('Tick while scrolling');
   const haptics = inspector.locator('.field', { hasText: 'Haptic feedback' }).locator('select');
+  const doubleTap = inspector.locator('label.check', { hasText: 'Double-tap to drag' }).locator('input[type="checkbox"]');
+  const holdInput = inspector.locator('.field', { hasText: /Drag hold duration|Double-tap interval/ }).locator('label');
   // the Trackpad's options come in groups, each under its own heading, with the switch that allows control first
   await expect(inspector.locator('h4.opt-section')).toHaveText(['Pointer', 'Scrolling', 'Haptics']);
-  expect(await inspector.locator('h4.opt-section, .field label, label.check').allTextContents().then((t) => t.slice(0, 5).map((x) => x.trim())))
-    .toEqual(['Allow controlling the mouse from the phone', 'Pointer', 'Pointer sensitivity', 'Pointer acceleration', 'Drag hold duration (ms)']);
+  expect(await inspector.locator('h4.opt-section, .field label, label.check').allTextContents().then((t) => t.slice(0, 6).map((x) => x.trim())))
+    .toEqual(['Allow controlling the mouse from the phone', 'Pointer', 'Pointer sensitivity', 'Pointer acceleration', 'Double-tap to drag', 'Drag hold duration (ms)']);
+  await doubleTap.check();
+  await expect(holdInput).toHaveText('Double-tap interval (ms)');
+  await doubleTap.uncheck();
+  await expect(holdInput).toHaveText('Drag hold duration (ms)');
   await expect(haptics).toHaveValue('normal');
   await expect(ticks).toBeVisible();
   await haptics.selectOption('off');
@@ -176,6 +182,9 @@ test('the settings of a Trackpad inside a Smart Stack have its groups and hide t
   });
   const config = page.locator('#inspector .stack-sub-config');
   await expect(config.locator('h4.opt-section')).toHaveText(['Pointer', 'Scrolling', 'Haptics']);
+  await expect(config.getByText('Drag hold duration (ms)')).toBeVisible();
+  await config.locator('label.check', { hasText: 'Double-tap to drag' }).locator('input[type="checkbox"]').check();
+  await expect(config.getByText('Double-tap interval (ms)')).toBeVisible();
   await expect(config.getByText('Haptic feedback')).toBeVisible();
   await expect(config.getByText('Tick while scrolling')).toHaveCount(0);
 });

@@ -451,6 +451,7 @@ class MainActivity : Activity(), SensorEventListener {
         }
         web.isVerticalScrollBarEnabled = false
         web.isHorizontalScrollBarEnabled = false
+        web.isHapticFeedbackEnabled = false
         web.webChromeClient = object : WebChromeClient() {
             override fun onConsoleMessage(message: ConsoleMessage): Boolean {
                 if (message.messageLevel() == ConsoleMessage.MessageLevel.ERROR)

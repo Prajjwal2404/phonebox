@@ -1032,3 +1032,95 @@ for (const { options, os = 'macos', extra, click, gesture, scroll } of [
     await ctx.close();
   });
 }
+
+test('the Trackpad widget supports double-tap and drag when doubleTapDrag is enabled', async ({ browser, baseURL }) => {
+  const ctx = await browser.newContext({ baseURL, viewport: { width: 780, height: 360 } });
+  await ctx.addInitScript(() => {
+    window.__phoneboxKey = 'pb-key-test';
+    window.__tp = [];
+    window.__feel = [];
+    window.Android = {
+      battery: () => '{}', version: () => 'test', haptic() { window.__feel.push('tick'); }, buzz(key, p) { if (key === 'pb-key-test') window.__feel.push(p); },
+      setBrightness() {}, setVolumeKeys() {}, is24Hour: () => true,
+      transport: () => 'usb', pcs: () => '[]',
+      trackpad: (key, type) => { if (key === 'pb-key-test') window.__tp.push(type); },
+    };
+  });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await layout(page, [widget('trackpad', { control: true, scrollBar: 'none', doubleTapDrag: true, holdDuration: 250 })]);
+
+  const pad = page.locator('.deck-trackpad');
+  await expect(pad.locator('.deck-trackpad-hint')).toContainText('Double-tap to drag');
+  const sent = () => page.evaluate(() => window.__tp.splice(0));
+  const felt = () => page.evaluate(() => window.__feel.splice(0));
+  const fire = (steps) => page.evaluate(async (steps) => {
+    const el = document.querySelector('.deck-trackpad');
+    for (const [type, x, y] of steps) {
+      if (type === 'wait') { await new Promise((r) => setTimeout(r, x)); continue; }
+      el.dispatchEvent(new PointerEvent(type, { pointerId: 1, pointerType: 'touch', clientX: x, clientY: y, bubbles: true, cancelable: true }));
+    }
+  }, steps);
+
+  // Native touchstart/touchend default gestures (which trigger Android WebView long-press haptics) are prevented.
+  const touchPrevented = await page.evaluate(() => {
+    const el = document.querySelector('.deck-trackpad');
+    const ts = new Event('touchstart', { bubbles: true, cancelable: true });
+    const te = new Event('touchend', { bubbles: true, cancelable: true });
+    el.dispatchEvent(ts);
+    el.dispatchEvent(te);
+    return [ts.defaultPrevented, te.defaultPrevented];
+  });
+  expect(touchPrevented).toEqual([true, true]);
+
+  // Holding one finger longer than holdDuration does NOT start a drag or buzz when doubleTapDrag is enabled.
+  await fire([['pointerdown', 200, 180], ['wait', 320], ['pointermove', 240, 180], ['pointerup', 240, 180]]);
+  const singleHold = await sent();
+  expect(singleHold).not.toContain('mousedown');
+  expect(singleHold).not.toContain('mouseup');
+  expect(singleHold).toContain('move');
+  expect(await felt()).toEqual([]);
+
+  // Double-tap within interval (< 250ms) and drag sends mousedown -> move -> mouseup without a preceding click, and buzzes on double-tap.
+  await fire([
+    ['pointerdown', 200, 180], ['wait', 30], ['pointerup', 200, 180],
+    ['wait', 80],
+    ['pointerdown', 200, 180], ['pointermove', 260, 190], ['wait', 30], ['pointerup', 260, 190],
+  ]);
+  const dragEvents = await sent();
+  expect(dragEvents[0]).toBe('mousedown');
+  expect(dragEvents).toContain('move');
+  expect(dragEvents.at(-1)).toBe('mouseup');
+  expect(dragEvents).not.toContain('click');
+  expect(await felt()).toEqual(['0,30']);
+
+  // Waiting longer than interval (> 250ms) sends the single click and does NOT drag on the next touch.
+  await fire([['pointerdown', 200, 180], ['wait', 30], ['pointerup', 200, 180], ['wait', 320]]);
+  expect(await sent()).toEqual(['click']);
+  expect(await felt()).toEqual(['0,14']);
+  await fire([['pointerdown', 200, 180], ['pointermove', 240, 180], ['pointerup', 240, 180]]);
+  const lateMove = await sent();
+  expect(lateMove).not.toContain('mousedown');
+  expect(lateMove).toContain('move');
+  expect(await felt()).toEqual([]);
+
+  // Quick double-tap without moving still produces a double-click (mousedown + mouseup + click).
+  await fire([
+    ['pointerdown', 200, 180], ['wait', 30], ['pointerup', 200, 180],
+    ['wait', 80],
+    ['pointerdown', 200, 180], ['wait', 30], ['pointerup', 200, 180],
+  ]);
+  expect(await sent()).toEqual(['mousedown', 'mouseup', 'click']);
+  expect(await felt()).toEqual(['0,30', '0,14']);
+
+  // Default mode (doubleTapDrag: false) still buzzes on long-tap hold instead of double-tap.
+  await layout(page, [widget('trackpad', { control: true, scrollBar: 'none', doubleTapDrag: false, holdDuration: 200 })]);
+  await sent(); await felt();
+  await fire([['pointerdown', 200, 180], ['wait', 260], ['pointermove', 240, 180], ['pointerup', 240, 180]]);
+  expect(await sent()).toContain('mousedown');
+  expect(await felt()).toEqual(['0,30']);
+
+  expect(errors).toEqual([]);
+  await ctx.close();
+});

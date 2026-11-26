@@ -1403,6 +1403,12 @@ function optionShown(w, d, o) {
   const v = driver ? optVal(w, driver) : undefined;
   return v !== o.showWhen.not;
 }
+function optionLabel(w, d, o) {
+  if (!o.labelWhen) return o.label;
+  const driver = d?.options?.find((x) => x.key === o.labelWhen.key);
+  const v = driver ? optVal(w, driver) : undefined;
+  return v === o.labelWhen.is ? o.labelWhen.label : o.label;
+}
 /** The catalog's defaults for a widget type, written out so the panel and the agent see what the inspector shows. */
 function defaultOptions(type) {
   const options = {};
@@ -2057,15 +2063,18 @@ function optionField(w, o, onValChange) {
     if (onValChange) { w.options = w.options || {}; w.options[key] = val; onValChange(key, val); }
     else setWOpt(w, key, val);
   };
-  const field = (...kids) => h('div', { class: 'field' }, h('label', {}, o.label), ...kids);
+  const d = widgetDef(w.type);
+  const label = optionLabel(w, d, o);
+  const field = (...kids) => h('div', { class: 'field' }, h('label', {}, label), ...kids);
   switch (o.type) {
     case 'bool':
       {
         // A Home Assistant widget without the key switches nothing (the agent and the phone read it as off), so show it unchecked;
         // its rows that follow this box are drawn again when it changes.
         const haFlag = w.type === 'ha' && o.key === 'control';
+        const drives = haFlag || d?.options?.some((x) => x.showWhen?.key === o.key || x.labelWhen?.key === o.key);
         return h('label', { class: 'check', style: { marginBottom: '10px' } }, h('input', { type: 'checkbox', checked: haFlag ? w.options?.control === true : v !== false,
-          onchange: (e) => { set(o.key, e.target.checked); if (haFlag) renderInspector(); } }), o.label);
+          onchange: (e) => { set(o.key, e.target.checked); if (drives) renderInspector(); } }), label);
       }
     case 'select': {
       // the options that depend on this one are drawn again when it changes
@@ -3893,6 +3902,7 @@ function localizeCatalog() {
     w.category = tc(w.category);
     for (const o of w.options || []) {
       if (o.label) o.label = tc(o.label);
+      if (o.labelWhen?.label) o.labelWhen.label = tc(o.labelWhen.label);
       if (o.section) o.section = tc(o.section);
       for (const c of o.choices || []) if (c[1]) c[1] = tc(c[1]);
     }

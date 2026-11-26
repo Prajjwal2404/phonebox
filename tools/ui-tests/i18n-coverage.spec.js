@@ -144,6 +144,7 @@ test('widget and template catalog entries are available in every interface langu
       for (const f of ['name', 'desc', 'category']) if (w[f]) wanted.add(w[f]);
       for (const o of w.options || []) {
         if (o.label) wanted.add(o.label);
+        if (o.labelWhen?.label) wanted.add(o.labelWhen.label);
         for (const c of o.choices || []) if (c[1]) wanted.add(c[1]);
       }
     }

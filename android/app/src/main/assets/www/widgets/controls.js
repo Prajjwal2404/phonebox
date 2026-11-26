@@ -812,6 +812,7 @@ W.trackpad = {
     const acceleration = o.acceleration !== false;
     const scrollSpeed = Number(o.scrollSpeed) || 1.0;
     const natural = Boolean(o.naturalScroll);
+    const doubleTapDrag = Boolean(o.doubleTapDrag);
     const holdDuration = Math.max(100, Number(o.holdDuration) || 350);
     const scrollBar = o.scrollBar || 'right';
     const scrollBarWidth = Math.max(16, Number(o.scrollBarWidth) || 36);
@@ -835,9 +836,13 @@ W.trackpad = {
       h('div', 'deck-trackpad-icon', icon(controlEnabled ? 'mouse' : 'lock')),
       h('div', 'deck-trackpad-hint', !controlEnabled
         ? tp('Enable mouse control in widget settings')
-        : (scrollBar !== 'none'
-          ? tp('Drag to move · Tap to click · Hold to drag · Bar or 2 fingers to scroll')
-          : tp('Drag to move · Tap to click · Hold to drag · Two fingers to scroll')))
+        : doubleTapDrag
+          ? (scrollBar !== 'none'
+            ? tp('Drag to move · Tap to click · Double-tap to drag · Bar or 2 fingers to scroll')
+            : tp('Drag to move · Tap to click · Double-tap to drag · Two fingers to scroll'))
+          : (scrollBar !== 'none'
+            ? tp('Drag to move · Tap to click · Hold to drag · Bar or 2 fingers to scroll')
+            : tp('Drag to move · Tap to click · Hold to drag · Two fingers to scroll')))
     );
 
     let scrollBarEl = null;
@@ -956,6 +961,16 @@ W.trackpad = {
     const activePointers = new Map();
     let maxActivePointers = 0, moved = false, tapFired = false;
     let isDragging = false, holdTimer = null;
+    let pendingTapTimer = null, lastTapUpTime = 0;
+    function flushPendingTap() {
+      if (!pendingTapTimer) return;
+      clearTimeout(pendingTapTimer);
+      pendingTapTimer = null;
+      if (destroyed) return;
+      flushMove();
+      send({ type: 'click' });
+      feel('click');
+    }
     let scrollAxis = null, cumScrollX = 0, cumScrollY = 0;
 
     // Three or more fingers make a gesture, as on a Mac's trackpad: a swipe (3 or 4 fingers) or, with 4 or more, a spread
@@ -1033,6 +1048,7 @@ W.trackpad = {
       maxActivePointers = Math.max(maxActivePointers, activePointers.size);
       if (activePointers.size > 1) {
         if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+        if (pendingTapTimer) { clearTimeout(pendingTapTimer); pendingTapTimer = null; }
         if (isDragging) {
           isDragging = false;
           send({ type: 'mouseup' });
@@ -1041,18 +1057,37 @@ W.trackpad = {
         cumScrollX = 0;
         cumScrollY = 0;
       }
+      if (isBar && pendingTapTimer) flushPendingTap();
       if (!isBar) rebase();
       if (!isBar && activePointers.size === 1) {
         moved = false;
         tapFired = false;
-        holdTimer = setTimeout(() => {
-          if (!moved && !tapFired && maxActivePointers === 1 && activePointers.size === 1 && !isDragging) {
-            isDragging = true;
-            flushMove();
-            send({ type: 'mousedown' });
-            feel('drag');
+        if (doubleTapDrag) {
+          if (pendingTapTimer) {
+            const withinInterval = now - lastTapUpTime < holdDuration;
+            clearTimeout(pendingTapTimer);
+            pendingTapTimer = null;
+            if (withinInterval) {
+              isDragging = true;
+              flushMove();
+              send({ type: 'mousedown' });
+              feel('drag');
+            } else {
+              flushMove();
+              send({ type: 'click' });
+              feel('click');
+            }
           }
-        }, holdDuration);
+        } else {
+          holdTimer = setTimeout(() => {
+            if (!moved && !tapFired && maxActivePointers === 1 && activePointers.size === 1 && !isDragging) {
+              isDragging = true;
+              flushMove();
+              send({ type: 'mousedown' });
+              feel('drag');
+            }
+          }, holdDuration);
+        }
       }
     });
 
@@ -1174,6 +1209,7 @@ W.trackpad = {
       // a quick flick can lift in the frame of its last move: judge the fingers now, before the one that lifts is gone
       if (e.type === 'pointerup' && gestureBase && !gestureFired) checkGesture(true);
       const pt = activePointers.get(e.pointerId);
+      const duration = pt ? performance.now() - pt.downTime : 9999;
       if (pt?.isBar) {
         if (scrollBarEl) scrollBarEl.classList.remove('is-scrolling');
         flushScroll();
@@ -1182,13 +1218,22 @@ W.trackpad = {
         send({ type: 'mouseup' });
         isDragging = false;
         tapFired = true;
-      } else if (!moved && !tapFired && e.type !== 'pointercancel') {
-        const duration = pt ? performance.now() - pt.downTime : 9999;
-        if (maxActivePointers === 1 && duration < 300) {
-          flushMove();
+        if (doubleTapDrag && !moved && maxActivePointers === 1 && duration < 300 && e.type !== 'pointercancel') {
           send({ type: 'click' });
           feel('click');
-          tapFired = true;
+        }
+      } else if (!moved && !tapFired && e.type !== 'pointercancel') {
+        if (maxActivePointers === 1 && duration < 300) {
+          if (doubleTapDrag) {
+            lastTapUpTime = performance.now();
+            pendingTapTimer = setTimeout(flushPendingTap, holdDuration);
+            tapFired = true;
+          } else {
+            flushMove();
+            send({ type: 'click' });
+            feel('click');
+            tapFired = true;
+          }
         } else if (maxActivePointers === 2 && duration < 400) {
           flushMove();
           flushScroll();
@@ -1214,9 +1259,9 @@ W.trackpad = {
 
     pad.addEventListener('pointerup', onPointerEnd);
     pad.addEventListener('pointercancel', onPointerEnd);
-    pad.addEventListener('touchstart', (e) => { e.stopPropagation(); }, { passive: false });
+    pad.addEventListener('touchstart', (e) => { e.stopPropagation(); e.preventDefault(); }, { passive: false });
     pad.addEventListener('touchmove', (e) => { e.stopPropagation(); e.preventDefault(); }, { passive: false });
-    pad.addEventListener('touchend', (e) => { e.stopPropagation(); }, { passive: false });
+    pad.addEventListener('touchend', (e) => { e.stopPropagation(); e.preventDefault(); }, { passive: false });
     pad.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); });
 
     return {
@@ -1232,6 +1277,7 @@ W.trackpad = {
         cumScrollY = 0;
         if (reconnectTimer) clearTimeout(reconnectTimer);
         if (holdTimer) clearTimeout(holdTimer);
+        if (pendingTapTimer) { clearTimeout(pendingTapTimer); pendingTapTimer = null; }
         clearTimeout(gestureQuietTimer);
         if (isDragging) { send({ type: 'mouseup' }); isDragging = false; }
         if (ws) { try { ws.close(); } catch (_) {} ws = null; }
