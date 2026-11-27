@@ -1226,6 +1226,31 @@ test('the Trackpad widget does not drift the cursor during staggered 2-finger sc
   ]);
   expect((await events()).map((e) => e.type)).toEqual(['click']);
 
+  // A tap with <=6 px jitter that crosses the 40 ms landing grace window still only clicks and never nudges the cursor.
+  await play([
+    ['pointerdown', 42, 200, 180],
+    ['wait', 15],
+    ['pointermove', 42, 203, 182],
+    ['wait', 50],
+    ['pointermove', 42, 204, 182],
+    ['wait', 30],
+    ['pointerup', 42, 204, 182],
+  ]);
+  expect((await events()).map((e) => e.type)).toEqual(['click']);
+
+  // Cancelling one pointer during a 2-finger scroll suppresses inertia even when the remaining finger lifts normally within 90 ms.
+  await play([
+    ['pointerdown', 50, 220, 100], ['pointerdown', 51, 280, 100],
+    ['pointermove', 50, 220, 150], ['pointermove', 51, 280, 150], ['wait', 16],
+    ['pointermove', 50, 220, 210], ['pointermove', 51, 280, 210],
+    ['pointercancel', 50, 220, 210],
+    ['wait', 16],
+    ['pointerup', 51, 280, 210],
+  ]);
+  await events();
+  await page.waitForTimeout(100);
+  expect(await events()).toEqual([]);
+
   expect(errors).toEqual([]);
   await ctx.close();
 });

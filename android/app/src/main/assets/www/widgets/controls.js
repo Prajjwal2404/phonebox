@@ -1040,7 +1040,7 @@ W.trackpad = {
     }
 
     const activePointers = new Map();
-    let maxActivePointers = 0, moved = false, tapFired = false;
+    let maxActivePointers = 0, moved = false, tapFired = false, sequenceCancelled = false;
     let isDragging = false, holdTimer = null;
     let pendingTapTimer = null, lastTapUpTime = 0;
     function flushPendingTap() {
@@ -1242,14 +1242,14 @@ W.trackpad = {
           pt.lastMoveTime = now;
         }
         const moveDx = rawDx * gain * sensitivity, moveDy = rawDy * gain * sensitivity;
-        // Defer initial single-finger movement briefly so staggered 2-finger scroll landings can cancel it
-        if (!isDragging && now - pt.downTime < LANDING_GRACE_MS) {
+        // Keep <=6 px tap jitter buffered until movement intent (>6 px) is established, and defer initial moves briefly for 2-finger landings
+        if (!isDragging && (!moved || now - pt.downTime < LANDING_GRACE_MS)) {
           initMoveDx += moveDx;
           initMoveDy += moveDy;
-          if (!landingTimer) {
+          if (!landingTimer && moved) {
             landingTimer = setTimeout(() => {
               landingTimer = null;
-              if (destroyed || maxActivePointers !== 1 || activePointers.size !== 1) {
+              if (destroyed || maxActivePointers !== 1 || activePointers.size !== 1 || (!moved && !isDragging)) {
                 initMoveDx = 0; initMoveDy = 0;
                 return;
               }
@@ -1319,6 +1319,10 @@ W.trackpad = {
       e.stopPropagation(); e.preventDefault();
       try { pad.releasePointerCapture(e.pointerId); } catch (_) {}
       if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+      if (e.type === 'pointercancel') {
+        sequenceCancelled = true;
+        scrollSamples.length = 0;
+      }
       if (activePointers.size === 1 && maxActivePointers === 1) {
         if (landingTimer) { clearTimeout(landingTimer); landingTimer = null; }
         if ((moved || isDragging) && e.type !== 'pointercancel' && (initMoveDx !== 0 || initMoveDy !== 0)) {
@@ -1370,8 +1374,8 @@ W.trackpad = {
         cumScrollY = 0;
       }
       if (activePointers.size === 0) {
-        const shouldCoast = e.type !== 'pointercancel' && !gestureFired && maxActivePointers === 2 && moved;
-        maxActivePointers = 0; moved = false; tapFired = false;
+        const shouldCoast = !sequenceCancelled && e.type !== 'pointercancel' && !gestureFired && maxActivePointers === 2 && moved;
+        maxActivePointers = 0; moved = false; tapFired = false; sequenceCancelled = false;
         gestureFired = false; gestureBase = null; scrollSince = 0;
         if (scrollBarEl) scrollBarEl.classList.remove('is-scrolling');
         flushMove(); flushScroll();
@@ -1400,6 +1404,7 @@ W.trackpad = {
         cumScrollY = 0;
         clearPendingInitMove();
         cancelInertia();
+        sequenceCancelled = false;
         if (reconnectTimer) clearTimeout(reconnectTimer);
         if (holdTimer) clearTimeout(holdTimer);
         if (pendingTapTimer) { clearTimeout(pendingTapTimer); pendingTapTimer = null; }
