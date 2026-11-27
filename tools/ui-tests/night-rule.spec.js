@@ -160,3 +160,43 @@ test('a continuous WebView touch pan after pointercancel keeps the night screen 
   await page.clock.runFor(12_000);
   await expect(page.locator('body')).toHaveClass(/(^|\s)night($|\s)/);
 });
+
+test('a scheduled night wake hold and press across schedule start keep the night screen off for 30 s after release', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-01-01T12:00:40') });
+  await page.goto('/panel/');
+  await expect(page.locator('#dots i')).not.toHaveCount(0);
+  await page.evaluate(async () => {
+    const key = 'pb-demo-config';
+    const saved = JSON.parse(localStorage.getItem(key) || '{}');
+    saved.night = { enabled: true, start: '12:01', end: '18:00', brightness: 0.02 };
+    saved.display = { ...(saved.display || {}), nightWhenDark: false, nightWhenUnreachable: false };
+    localStorage.setItem(key, JSON.stringify(saved));
+    const panel = await import('/panel/main.js');
+    panel.cfg.night = saved.night;
+    panel.cfg.display = { ...panel.cfg.display, nightWhenDark: false, nightWhenUnreachable: false };
+  });
+
+  // Press at 12:00:50 and hold across the 12:01:00 schedule start until 12:01:10.
+  await page.clock.runFor(10_000);
+  await page.mouse.move(200, 200);
+  await page.mouse.down();
+  await page.clock.runFor(20_000);
+  await expect(page.locator('body')).not.toHaveClass(/(^|\s)night($|\s)/);
+
+  // Release at 12:01:10: night stays off for 30 s after release, then turns on.
+  await page.mouse.up();
+  await page.clock.runFor(20_000);
+  await expect(page.locator('body')).not.toHaveClass(/(^|\s)night($|\s)/);
+  await page.clock.runFor(12_000);
+  await expect(page.locator('body')).toHaveClass(/(^|\s)night($|\s)/);
+
+  // Wake during scheduled night, then tap at 20 s to verify wakeUntil itself resets independently of darkRoom.
+  await page.mouse.click(200, 200);
+  await expect(page.locator('body')).not.toHaveClass(/(^|\s)night($|\s)/);
+  await page.clock.runFor(20_000);
+  await page.mouse.click(200, 200);
+  await page.clock.runFor(20_000);
+  await expect(page.locator('body')).not.toHaveClass(/(^|\s)night($|\s)/);
+  await page.clock.runFor(12_000);
+  await expect(page.locator('body')).toHaveClass(/(^|\s)night($|\s)/);
+});

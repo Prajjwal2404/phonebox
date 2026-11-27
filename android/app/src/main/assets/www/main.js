@@ -2545,10 +2545,10 @@ const WAKE_MS = 30_000;
 const activePointers = new Set();
 let activeTouches = 0;
 const isTouching = () => activePointers.size > 0 || activeTouches > 0;
-const extendWake = (now = Date.now()) => { if (now < wakeUntil) wakeUntil = now + WAKE_MS; };
+const extendWake = (now = Date.now()) => { wakeUntil = Math.max(wakeUntil, now + WAKE_MS); };
 
 function wakeFromNight(now = Date.now()) {
-  wakeUntil = now + WAKE_MS;
+  extendWake(now);
   if (darkRoom) {
     darkRoom = false;
     darkSince = lux !== null && lux < 3 ? now : 0;
