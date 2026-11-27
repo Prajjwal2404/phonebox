@@ -200,3 +200,26 @@ test('a scheduled night wake hold and press across schedule start keep the night
   await page.clock.runFor(12_000);
   await expect(page.locator('body')).toHaveClass(/(^|\s)night($|\s)/);
 });
+
+test('a pointerdown with no pointerup stops counting after 2 minutes and clears on pause', async ({ page }) => {
+  await openDarkPanel(page);
+
+  await page.evaluate(() => document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 1, pointerType: 'touch' })));
+  await page.clock.runFor(90_000);
+  await expect(page.locator('body')).not.toHaveClass(/(^|\s)night($|\s)/);
+
+  // After 2 minutes without move or release the contact is pruned, so the 30 s timer finishes.
+  await page.clock.runFor(65_000);
+  await expect(page.locator('body')).toHaveClass(/(^|\s)night($|\s)/);
+
+  // A held contact also clears immediately when the app pauses.
+  await page.mouse.click(200, 200);
+  await expect(page.locator('body')).not.toHaveClass(/(^|\s)night($|\s)/);
+  await page.mouse.move(200, 200);
+  await page.mouse.down();
+  await page.clock.runFor(35_000);
+  await expect(page.locator('body')).not.toHaveClass(/(^|\s)night($|\s)/);
+  await page.evaluate(() => window.onAppPause(true));
+  await page.clock.runFor(32_000);
+  await expect(page.locator('body')).toHaveClass(/(^|\s)night($|\s)/);
+});

@@ -2542,9 +2542,29 @@ pager.addEventListener('touchcancel', (e) => {
 }, { passive: true });
 
 const WAKE_MS = 30_000;
-const activePointers = new Set();
+// Cap a contact without any move or release so a missed WebView up/cancel cannot hold the screen awake indefinitely.
+const TOUCH_STALE_MS = 120_000;
+const activePointers = new Map();
+const ignoredPointers = new Set();
 let activeTouches = 0;
-const isTouching = () => activePointers.size > 0 || activeTouches > 0;
+let activeTouchAt = 0;
+let touchOnNav = false;
+const isNavControl = (e) => !!e.target?.closest?.('#navCard, #navChip');
+function clearActiveInput() {
+  activePointers.clear();
+  ignoredPointers.clear();
+  activeTouches = 0;
+  activeTouchAt = 0;
+  touchOnNav = false;
+}
+function clearMousePointers() {
+  for (const [id, p] of activePointers) if (p.mouse) activePointers.delete(id);
+}
+function isTouching(now = Date.now()) {
+  for (const [id, p] of activePointers) if (now - p.at >= TOUCH_STALE_MS) activePointers.delete(id);
+  if (activeTouches > 0 && now - activeTouchAt >= TOUCH_STALE_MS) { activeTouches = 0; activeTouchAt = 0; touchOnNav = false; }
+  return activePointers.size > 0 || activeTouches > 0;
+}
 const extendWake = (now = Date.now()) => { wakeUntil = Math.max(wakeUntil, now + WAKE_MS); };
 
 function wakeFromNight(now = Date.now()) {
@@ -2607,38 +2627,56 @@ function noteMove() {
   recordInteraction(now);
 }
 function onTouchBegin(e) {
-  if (dimmed) wakeFromDim();
-  if (e.target?.closest?.('#navCard, #navChip')) return;
   if (navQueue.length) { navQueue = navQueue.filter((r) => r.kind !== 'home'); pump(); }
   recordInteraction();
 }
 window.addEventListener('pointerdown', (e) => {
-  if (e.buttons !== 0 || e.pointerType === 'touch' || e.pointerType === 'pen' || e.pointerType === '') {
-    activePointers.add(e.pointerId ?? 0);
-  }
+  if (dimmed) wakeFromDim();
+  const id = e.pointerId ?? 0;
+  if (isNavControl(e)) { ignoredPointers.add(id); return; }
+  ignoredPointers.delete(id);
+  activePointers.set(id, { at: Date.now(), mouse: e.pointerType === 'mouse' });
   onTouchBegin(e);
 }, { passive: true, capture: true });
 window.addEventListener('touchstart', (e) => {
+  if (dimmed) wakeFromDim();
+  if (isNavControl(e)) { touchOnNav = true; return; }
+  touchOnNav = false;
   activeTouches = e.touches?.length ?? 0;
+  activeTouchAt = activeTouches > 0 ? Date.now() : 0;
   onTouchBegin(e);
 }, { passive: true, capture: true });
 window.addEventListener('pointermove', (e) => {
+  if (e.pointerType === 'mouse' && e.buttons === 0) { clearMousePointers(); return; }
   if (e.buttons === 0 && e.pointerType !== 'touch' && e.pointerType !== 'pen') return;
+  const id = e.pointerId ?? 0;
+  if (ignoredPointers.has(id) || isNavControl(e)) return;
+  if (activePointers.has(id)) activePointers.set(id, { at: Date.now(), mouse: e.pointerType === 'mouse' });
   noteMove();
 }, { passive: true, capture: true });
+document.documentElement.addEventListener('pointerleave', clearMousePointers, { passive: true });
 window.addEventListener('touchmove', (e) => {
+  if (touchOnNav || isNavControl(e)) return;
   activeTouches = e.touches?.length ?? activeTouches;
+  if (activeTouches > 0) activeTouchAt = Date.now();
   noteMove();
 }, { passive: true, capture: true });
 ['pointerup', 'pointercancel'].forEach((ev) => window.addEventListener(ev, (e) => {
-  activePointers.delete(e.pointerId ?? 0);
+  const id = e.pointerId ?? 0;
+  const ignored = ignoredPointers.delete(id);
+  const tracked = activePointers.delete(id);
+  if (ignored || isNavControl(e) || !tracked) return;
   if (!nightOn) recordInteraction();
 }, { passive: true, capture: true }));
 ['touchend', 'touchcancel'].forEach((ev) => window.addEventListener(ev, (e) => {
   activeTouches = e.touches?.length ?? 0;
+  if (!activeTouches) activeTouchAt = 0;
+  const wasNav = touchOnNav;
+  if (!activeTouches) touchOnNav = false;
+  if (wasNav || isNavControl(e)) return;
   if (!nightOn) recordInteraction();
 }, { passive: true, capture: true }));
-window.addEventListener('blur', () => { activePointers.clear(); activeTouches = 0; });
+window.addEventListener('blur', clearActiveInput);
 
 // ---------------------------------------------------------------- clock tick & night mode
 export function parseHM(s) { const [hh, mm] = (s || '0:0').split(':').map(Number); return hh * 60 + (mm || 0); }
@@ -2778,8 +2816,9 @@ export function tick() {
   $('nClock').textContent = fmtNightClock(now);
   $('nDate').textContent = now.toLocaleDateString(LOCALE, { weekday: 'long', day: 'numeric', month: 'long' });
   const nowMs = now.getTime();
-  if (isTouching()) { lastTouch = lastUserTouch = nowMs; extendWake(nowMs); }
-  if (darkSince && !isTouching() && nowMs - Math.max(darkSince, lastUserTouch) > 30_000) darkRoom = true;
+  const touching = isTouching(nowMs);
+  if (touching) { lastTouch = lastUserTouch = nowMs; extendWake(nowMs); }
+  if (darkSince && !touching && nowMs - Math.max(darkSince, lastUserTouch) > 30_000) darkRoom = true;
   reconcileUnreachableNight(now);
   if (!PREVIEW && idleDue() && !navQueue.some((r) => r.kind === 'home')) {
     if (curPage === homeIndex()) { closeSheet(); closeOverview(); lastNav = Date.now(); } // only a sheet to close
@@ -3057,9 +3096,13 @@ export const idle = () => appPaused || document.hidden;
 window.onAppPause = (paused) => {
   const was = idle();
   appPaused = !!paused;
+  if (appPaused) clearActiveInput();
   if (was && !idle()) wokeUp();
 };
-document.addEventListener('visibilitychange', () => { if (!document.hidden && !appPaused) wokeUp(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) clearActiveInput();
+  else if (!appPaused) wokeUp();
+});
 // what the paused panel skipped is fetched at once, not at the next interval
 function wokeUp() {
   if (!online) return;

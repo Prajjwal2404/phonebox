@@ -159,3 +159,20 @@ test('switching to another page automatically clears page pause', async ({ page 
   await step(page, 40_000);
   expect(await activeDot(page)).toBe(0);
 });
+
+test('tapping Go now on the page-switch card does not delay the next queued switch', async ({ page }) => {
+  await show(page, { touchGraceSec: 20, minDwellSec: 0, switchCountdownSec: 3 });
+
+  await emit(page, 'goto', { page: 'three', rule: 'r1', name: 'R1', priority: 5 });
+  await emit(page, 'goto', { page: 'five', rule: 'r2', name: 'R2', priority: 1 });
+  await stepUntil(page, async () => /\bon\b/.test(await page.locator('#navCard').getAttribute('class')));
+
+  // Tapping Go now on the card must not start touchGraceSec for the queued switch behind it.
+  await page.locator('#nvGo').click();
+  await step(page, 500);
+  expect(await activeDot(page)).toBe(2);
+  await expect(page.locator('#navChip')).not.toHaveClass(/\bon\b/);
+
+  await step(page, 3500);
+  expect(await activeDot(page)).toBe(4);
+});
