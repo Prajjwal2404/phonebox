@@ -2546,24 +2546,22 @@ const WAKE_MS = 30_000;
 const TOUCH_STALE_MS = 120_000;
 const activePointers = new Map();
 const ignoredPointers = new Set();
-let activeTouches = 0;
-let activeTouchAt = 0;
-let touchOnNav = false;
+const activeTouchMap = new Map();
+const ignoredTouches = new Set();
 const isNavControl = (e) => !!e.target?.closest?.('#navCard, #navChip');
 function clearActiveInput() {
   activePointers.clear();
   ignoredPointers.clear();
-  activeTouches = 0;
-  activeTouchAt = 0;
-  touchOnNav = false;
+  activeTouchMap.clear();
+  ignoredTouches.clear();
 }
 function clearMousePointers() {
   for (const [id, p] of activePointers) if (p.mouse) activePointers.delete(id);
 }
 function isTouching(now = Date.now()) {
   for (const [id, p] of activePointers) if (now - p.at >= TOUCH_STALE_MS) activePointers.delete(id);
-  if (activeTouches > 0 && now - activeTouchAt >= TOUCH_STALE_MS) { activeTouches = 0; activeTouchAt = 0; touchOnNav = false; }
-  return activePointers.size > 0 || activeTouches > 0;
+  for (const [id, at] of activeTouchMap) if (now - at >= TOUCH_STALE_MS) activeTouchMap.delete(id);
+  return activePointers.size > 0 || activeTouchMap.size > 0;
 }
 const extendWake = (now = Date.now()) => { wakeUntil = Math.max(wakeUntil, now + WAKE_MS); };
 
@@ -2640,10 +2638,23 @@ window.addEventListener('pointerdown', (e) => {
 }, { passive: true, capture: true });
 window.addEventListener('touchstart', (e) => {
   if (dimmed) wakeFromDim();
-  if (isNavControl(e)) { touchOnNav = true; return; }
-  touchOnNav = false;
-  activeTouches = e.touches?.length ?? 0;
-  activeTouchAt = activeTouches > 0 ? Date.now() : 0;
+  const list = e.changedTouches?.length ? e.changedTouches : e.touches;
+  const nav = isNavControl(e);
+  const now = Date.now();
+  let nonNav = false;
+  for (let i = 0; list && i < list.length; i++) {
+    const t = list[i];
+    const id = t.identifier ?? i;
+    if (nav || t.target?.closest?.('#navCard, #navChip')) {
+      ignoredTouches.add(id);
+      activeTouchMap.delete(id);
+    } else {
+      ignoredTouches.delete(id);
+      activeTouchMap.set(id, now);
+      nonNav = true;
+    }
+  }
+  if (!nonNav) return;
   onTouchBegin(e);
 }, { passive: true, capture: true });
 window.addEventListener('pointermove', (e) => {
@@ -2656,10 +2667,19 @@ window.addEventListener('pointermove', (e) => {
 }, { passive: true, capture: true });
 document.documentElement.addEventListener('pointerleave', clearMousePointers, { passive: true });
 window.addEventListener('touchmove', (e) => {
-  if (touchOnNav || isNavControl(e)) return;
-  activeTouches = e.touches?.length ?? activeTouches;
-  if (activeTouches > 0) activeTouchAt = Date.now();
-  noteMove();
+  const list = e.changedTouches?.length ? e.changedTouches : e.touches;
+  const nav = isNavControl(e);
+  const now = Date.now();
+  let movedNonNav = false;
+  for (let i = 0; list && i < list.length; i++) {
+    const id = list[i].identifier ?? i;
+    if (ignoredTouches.has(id)) continue;
+    if (activeTouchMap.has(id) || !nav) {
+      activeTouchMap.set(id, now);
+      movedNonNav = true;
+    }
+  }
+  if (movedNonNav) noteMove();
 }, { passive: true, capture: true });
 ['pointerup', 'pointercancel'].forEach((ev) => window.addEventListener(ev, (e) => {
   const id = e.pointerId ?? 0;
@@ -2669,12 +2689,22 @@ window.addEventListener('touchmove', (e) => {
   if (!nightOn) recordInteraction();
 }, { passive: true, capture: true }));
 ['touchend', 'touchcancel'].forEach((ev) => window.addEventListener(ev, (e) => {
-  activeTouches = e.touches?.length ?? 0;
-  if (!activeTouches) activeTouchAt = 0;
-  const wasNav = touchOnNav;
-  if (!activeTouches) touchOnNav = false;
-  if (wasNav || isNavControl(e)) return;
-  if (!nightOn) recordInteraction();
+  const ended = e.changedTouches?.length ? e.changedTouches : null;
+  let releasedNonNav = false;
+  if (ended) {
+    for (let i = 0; i < ended.length; i++) {
+      const id = ended[i].identifier ?? i;
+      const ignored = ignoredTouches.delete(id);
+      const tracked = activeTouchMap.delete(id);
+      if (!ignored && tracked && !isNavControl(e)) releasedNonNav = true;
+    }
+  } else if ((e.touches?.length ?? 0) === 0) {
+    releasedNonNav = activeTouchMap.size > 0 && !isNavControl(e);
+    activeTouchMap.clear();
+    ignoredTouches.clear();
+  }
+  if (e.touches && e.touches.length === 0) { activeTouchMap.clear(); ignoredTouches.clear(); }
+  if (releasedNonNav && !nightOn) recordInteraction();
 }, { passive: true, capture: true }));
 window.addEventListener('blur', clearActiveInput);
 
