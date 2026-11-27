@@ -1124,3 +1124,108 @@ test('the Trackpad widget supports double-tap and drag when doubleTapDrag is ena
   expect(errors).toEqual([]);
   await ctx.close();
 });
+
+test('the Trackpad widget does not drift the cursor during staggered 2-finger scrolling and coasts with inertia after a flick', async ({ browser, baseURL }) => {
+  const ctx = await browser.newContext({ baseURL, viewport: { width: 780, height: 360 } });
+  await ctx.addInitScript(() => {
+    window.__phoneboxKey = 'pb-key-test';
+    window.__tpEvents = [];
+    window.Android = {
+      battery: () => '{}', version: () => 'test', haptic() {}, buzz() {}, setBrightness() {}, setVolumeKeys() {}, is24Hour: () => true,
+      transport: () => 'usb', pcs: () => '[]',
+      trackpad: (key, type, dx, dy, delta) => {
+        if (key === 'pb-key-test') window.__tpEvents.push({ type, dx, dy, delta });
+      },
+    };
+  });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await layout(page, [widget('trackpad', { control: true, scrollBar: 'none' })]);
+
+  const play = (steps) => page.evaluate(async (steps) => {
+    const pad = document.querySelector('.deck-trackpad');
+    for (const [type, id, x, y] of steps) {
+      if (type === 'wait') { await new Promise((r) => setTimeout(r, id)); continue; }
+      pad.dispatchEvent(new PointerEvent(type, { pointerId: id, pointerType: 'touch', clientX: x, clientY: y, bubbles: true, cancelable: true }));
+    }
+  }, steps);
+  const events = () => page.evaluate(() => window.__tpEvents.splice(0));
+
+  // Staggered 2-finger landing (finger 1 moves slightly within 25ms before finger 2 lands),
+  // 2-finger scroll, then staggered lift (finger 1 lifts while finger 2 keeps moving for 40ms):
+  // zero cursor 'move' events should ever be sent.
+  await play([
+    ['pointerdown', 1, 220, 120],
+    ['wait', 15],
+    ['pointermove', 1, 220, 128],
+    ['wait', 10],
+    ['pointerdown', 2, 280, 120],
+    ['pointermove', 1, 220, 160], ['pointermove', 2, 280, 160], ['wait', 20],
+    ['pointermove', 1, 220, 200], ['pointermove', 2, 280, 200], ['wait', 20],
+    ['pointerup', 1, 220, 200],
+    ['wait', 20],
+    ['pointermove', 2, 280, 225],
+    ['wait', 20],
+    ['pointermove', 2, 280, 240],
+    ['pointerup', 2, 280, 240],
+  ]);
+  const duringAndAfter = await events();
+  expect(duringAndAfter.some((e) => e.type === 'scroll')).toBe(true);
+  expect(duringAndAfter.filter((e) => e.type === 'move')).toEqual([]);
+
+  // Fast 2-finger flick produces inertial scroll events after fingers lift, with decaying deltas.
+  await page.waitForTimeout(150);
+  await events();
+  await play([
+    ['pointerdown', 10, 220, 100], ['pointerdown', 11, 280, 100],
+    ['pointermove', 10, 220, 140], ['pointermove', 11, 280, 140], ['wait', 16],
+    ['pointermove', 10, 220, 190], ['pointermove', 11, 280, 190], ['wait', 16],
+    ['pointermove', 10, 220, 240], ['pointermove', 11, 280, 240],
+    ['pointerup', 10, 220, 240], ['pointerup', 11, 280, 240],
+  ]);
+  await events(); // drain active scroll events up to pointerup
+  await page.waitForTimeout(140);
+  const coastEvents = await events();
+  expect(coastEvents.length).toBeGreaterThan(2);
+  expect(coastEvents.every((e) => e.type === 'scroll')).toBe(true);
+  expect(Math.abs(coastEvents[0].delta)).toBeGreaterThan(Math.abs(coastEvents.at(-1).delta));
+
+  // Touching down during inertial coasting cancels inertia immediately.
+  await play([['pointerdown', 20, 220, 180], ['pointerup', 20, 220, 180]]);
+  await events();
+  await page.waitForTimeout(100);
+  expect(await events()).toEqual([]);
+
+  // Pausing fingers before lifting does not trigger inertial coasting.
+  await play([
+    ['pointerdown', 30, 220, 100], ['pointerdown', 31, 280, 100],
+    ['pointermove', 30, 220, 180], ['pointermove', 31, 280, 180], ['wait', 16],
+    ['pointermove', 30, 220, 230], ['pointermove', 31, 280, 230],
+    ['wait', 130],
+    ['pointerup', 30, 220, 230], ['pointerup', 31, 280, 230],
+  ]);
+  await events();
+  await page.waitForTimeout(100);
+  expect(await events()).toEqual([]);
+
+  // Normal 1-finger pointing (> 40ms) still moves the cursor cleanly, and a tiny tap jitter (<= 6px) only clicks.
+  await play([
+    ['pointerdown', 40, 200, 180],
+    ['wait', 60],
+    ['pointermove', 40, 225, 190],
+    ['wait', 20],
+    ['pointerup', 40, 225, 190],
+  ]);
+  expect((await events()).map((e) => e.type)).toContain('move');
+
+  await play([
+    ['pointerdown', 41, 200, 180],
+    ['pointermove', 41, 203, 182],
+    ['pointerup', 41, 203, 182],
+  ]);
+  expect((await events()).map((e) => e.type)).toEqual(['click']);
+
+  expect(errors).toEqual([]);
+  await ctx.close();
+});
