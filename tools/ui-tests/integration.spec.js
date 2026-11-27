@@ -1191,11 +1191,28 @@ test('the Trackpad widget does not drift the cursor during staggered 2-finger sc
   expect(coastEvents.every((e) => e.type === 'scroll')).toBe(true);
   expect(Math.abs(coastEvents[0].delta)).toBeGreaterThan(Math.abs(coastEvents.at(-1).delta));
 
-  // Touching down during inertial coasting cancels inertia immediately.
-  await play([['pointerdown', 20, 220, 180], ['pointerup', 20, 220, 180]]);
-  await events();
+  // Touching down during inertial coasting cancels inertia immediately without moving the cursor.
+  await play([['pointerdown', 20, 220, 180], ['wait', 10], ['pointermove', 20, 223, 182], ['pointerup', 20, 223, 182]]);
+  const touchStop = await events();
+  expect(touchStop.filter((e) => e.type === 'move')).toEqual([]);
   await page.waitForTimeout(100);
   expect(await events()).toEqual([]);
+
+  // Disabling inertialScroll prevents momentum coasting after a fast 2-finger flick.
+  await layout(page, [widget('trackpad', { control: true, scrollBar: 'none', inertialScroll: false })]);
+  await events();
+  await play([
+    ['pointerdown', 60, 220, 100], ['pointerdown', 61, 280, 100],
+    ['pointermove', 60, 220, 150], ['pointermove', 61, 280, 150], ['wait', 16],
+    ['pointermove', 60, 220, 210], ['pointermove', 61, 280, 210], ['wait', 16],
+    ['pointermove', 60, 220, 260], ['pointermove', 61, 280, 260],
+    ['pointerup', 60, 220, 260], ['pointerup', 61, 280, 260],
+  ]);
+  expect((await events()).some((e) => e.type === 'scroll')).toBe(true);
+  await page.waitForTimeout(120);
+  expect(await events()).toEqual([]);
+  await layout(page, [widget('trackpad', { control: true, scrollBar: 'none' })]);
+  await events();
 
   // Pausing fingers before lifting does not trigger inertial coasting.
   await play([

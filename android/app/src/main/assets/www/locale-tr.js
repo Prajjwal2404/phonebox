@@ -807,6 +807,7 @@ window.PhoneBoxLocaleData = Object.assign(window.PhoneBoxLocaleData || {}, {
       "Mics off, camera off": "Mikrofonlar ve kamera kapalı",
       "Mute every microphone and stop the OBS virtual camera with one tap; speakers stay as they are.": "Tek dokunuşla tüm mikrofonları sessize alır ve OBS sanal kamerasını durdurur; hoparlörler olduğu gibi kalır.",
       "Natural scrolling": "Doğal kaydırma",
+      "Inertial scrolling": "Ataletli kaydırma",
       "Network": "Ağ",
       "New routine": "Yeni rutin",
       "News feeds": "Haberler",

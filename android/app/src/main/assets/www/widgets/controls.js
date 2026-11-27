@@ -826,6 +826,7 @@ W.trackpad = {
     const acceleration = o.acceleration !== false;
     const scrollSpeed = Number(o.scrollSpeed) || 1.0;
     const natural = Boolean(o.naturalScroll);
+    const inertialScroll = o.inertialScroll !== false;
     const doubleTapDrag = Boolean(o.doubleTapDrag);
     const holdDuration = Math.max(100, Number(o.holdDuration) || 350);
     const scrollBar = o.scrollBar || 'right';
@@ -968,7 +969,7 @@ W.trackpad = {
       }
     }
     function startInertia() {
-      if (destroyed || scrollSamples.length === 0) { scrollSamples.length = 0; return; }
+      if (!inertialScroll || destroyed || scrollSamples.length === 0) { scrollSamples.length = 0; return; }
       const now = performance.now();
       const newestT = scrollSamples[scrollSamples.length - 1].t;
       if (now - newestT > SCROLL_VEL_WINDOW_MS) { scrollSamples.length = 0; return; }
