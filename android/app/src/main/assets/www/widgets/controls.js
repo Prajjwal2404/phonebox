@@ -953,6 +953,7 @@ W.trackpad = {
     const SCROLL_INERTIA_MIN_START = 1.2 * scrollSpeed;
     const SCROLL_INERTIA_MIN_STOP = 0.12;
     const SCROLL_INERTIA_MAX_V = 45;
+    const SCROLL_INERTIA_MAX_GAP_MS = 200;
     function cancelInertia() {
       if (inertiaRaf) { cancelAnimationFrame(inertiaRaf); inertiaRaf = 0; }
       inertiaVx = 0; inertiaVy = 0;
@@ -991,8 +992,17 @@ W.trackpad = {
       inertiaVx = vx; inertiaVy = vy; inertiaLastTime = now;
       const tick = (t) => {
         if (destroyed || !inertiaRaf) return;
-        const dt = Math.max(1, Math.min(48, t - inertiaLastTime));
+        const dt = t - inertiaLastTime;
         inertiaLastTime = t;
+        if (dt <= 0) {
+          inertiaRaf = requestAnimationFrame(tick);
+          return;
+        }
+        if (dt > SCROLL_INERTIA_MAX_GAP_MS) {
+          inertiaRaf = 0; inertiaVx = 0; inertiaVy = 0;
+          accScrollX = 0; accScrollY = 0;
+          return;
+        }
         const decay = Math.exp(-dt / SCROLL_INERTIA_TAU_MS);
         const stepDx = inertiaVx * SCROLL_INERTIA_TAU_MS * (1 - decay);
         const stepDy = inertiaVy * SCROLL_INERTIA_TAU_MS * (1 - decay);
