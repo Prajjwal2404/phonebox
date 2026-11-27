@@ -2541,10 +2541,32 @@ pager.addEventListener('touchcancel', (e) => {
   else finishSwipe(swipeLastX, swipeLastY);
 }, { passive: true });
 
+const WAKE_MS = 30_000;
+const activePointers = new Set();
+let activeTouches = 0;
+const isTouching = () => activePointers.size > 0 || activeTouches > 0;
+const extendWake = (now = Date.now()) => { if (now < wakeUntil) wakeUntil = now + WAKE_MS; };
+
+function wakeFromNight(now = Date.now()) {
+  wakeUntil = now + WAKE_MS;
+  if (darkRoom) {
+    darkRoom = false;
+    darkSince = lux !== null && lux < 3 ? now : 0;
+  }
+  setNight(false);
+}
+
+function recordInteraction(now = Date.now()) {
+  lastTouch = lastUserTouch = now;
+  if (nightOn) wakeFromNight(now);
+  else extendWake(now);
+}
+
 /** Called by the Android shell (volume keys) and by arrow keys in a desktop browser. */
 window.onAndroidKey = (k) => {
-  lastTouch = lastUserTouch = Date.now();
-  if (nightOn) { wakeUntil = Date.now() + 30_000; setNight(false); return; }
+  const wasNight = nightOn;
+  recordInteraction();
+  if (wasNight) return;
   if (!$('overview').hidden) closeOverview();
   if (k === 'next') goPage(curPage + 1 >= pages.length ? 0 : curPage + 1, true);
   else if (k === 'prev') goPage(curPage - 1 < 0 ? pages.length - 1 : curPage - 1, true);
@@ -2576,13 +2598,47 @@ window.onAndroidBack = () => {
 };
 window.addEventListener('resize', () => { buildLayout(); goPage(curPage, true); fitPageBar(); });
 
-['pointerdown', 'touchstart'].forEach((ev) => document.addEventListener(ev, (e) => {
+let lastMoveTouch = 0;
+function noteMove() {
+  if (nightOn || dimmed) return;
+  const now = Date.now();
+  if (Math.abs(now - lastMoveTouch) < 1000) return;
+  lastMoveTouch = now;
+  recordInteraction(now);
+}
+function onTouchBegin(e) {
   if (dimmed) wakeFromDim();
   if (e.target?.closest?.('#navCard, #navChip')) return;
-  lastTouch = lastUserTouch = Date.now();
   if (navQueue.length) { navQueue = navQueue.filter((r) => r.kind !== 'home'); pump(); }
-  if (nightOn) { wakeUntil = Date.now() + 30_000; setNight(false); }
+  recordInteraction();
+}
+window.addEventListener('pointerdown', (e) => {
+  if (e.buttons !== 0 || e.pointerType === 'touch' || e.pointerType === 'pen' || e.pointerType === '') {
+    activePointers.add(e.pointerId ?? 0);
+  }
+  onTouchBegin(e);
+}, { passive: true, capture: true });
+window.addEventListener('touchstart', (e) => {
+  activeTouches = e.touches?.length ?? 0;
+  onTouchBegin(e);
+}, { passive: true, capture: true });
+window.addEventListener('pointermove', (e) => {
+  if (e.buttons === 0 && e.pointerType !== 'touch' && e.pointerType !== 'pen') return;
+  noteMove();
+}, { passive: true, capture: true });
+window.addEventListener('touchmove', (e) => {
+  activeTouches = e.touches?.length ?? activeTouches;
+  noteMove();
+}, { passive: true, capture: true });
+['pointerup', 'pointercancel'].forEach((ev) => window.addEventListener(ev, (e) => {
+  activePointers.delete(e.pointerId ?? 0);
+  if (!nightOn) recordInteraction();
 }, { passive: true, capture: true }));
+['touchend', 'touchcancel'].forEach((ev) => window.addEventListener(ev, (e) => {
+  activeTouches = e.touches?.length ?? 0;
+  if (!nightOn) recordInteraction();
+}, { passive: true, capture: true }));
+window.addEventListener('blur', () => { activePointers.clear(); activeTouches = 0; });
 
 // ---------------------------------------------------------------- clock tick & night mode
 export function parseHM(s) { const [hh, mm] = (s || '0:0').split(':').map(Number); return hh * 60 + (mm || 0); }
@@ -2612,7 +2668,7 @@ function reconcileUnreachableNight(now = new Date()) {
   const dark = darkRoom && cfg.display?.nightWhenDark === true;
   // a running rule can hold the night screen up (its "night" action): the agent's active list carries ids only, so match them against cfg.rules
   const ruleNight = (D.state?.rules || []).some((id) => (cfg.rules || []).some((r) => r.id === id && r.then === 'night'));
-  setNight((isNight(now) || dark || unreachable || ruleNight) && Date.now() > wakeUntil);
+  setNight((isNight(now) || dark || unreachable || ruleNight) && Date.now() > wakeUntil && !isTouching());
 }
 /**
  * Before widgets are built: a timer that ran out while the panel was closed rings during the build, so the night
@@ -2652,8 +2708,7 @@ window.onAndroidSensor = (kind, value) => {
   } else if (kind === 'proximity' && value === true && cfg.display?.proximityWake !== false && (nightOn || dimmed)) {
     undim();
     if (!nightOn) return;
-    wakeUntil = Date.now() + 30_000;
-    setNight(false);
+    wakeFromNight();
   }
 };
 
@@ -2722,7 +2777,9 @@ export function tick() {
   const now = new Date();
   $('nClock').textContent = fmtNightClock(now);
   $('nDate').textContent = now.toLocaleDateString(LOCALE, { weekday: 'long', day: 'numeric', month: 'long' });
-  if (darkSince && Date.now() - darkSince > 30_000) darkRoom = true;
+  const nowMs = now.getTime();
+  if (isTouching()) { lastTouch = lastUserTouch = nowMs; extendWake(nowMs); }
+  if (darkSince && !isTouching() && nowMs - Math.max(darkSince, lastUserTouch) > 30_000) darkRoom = true;
   reconcileUnreachableNight(now);
   if (!PREVIEW && idleDue() && !navQueue.some((r) => r.kind === 'home')) {
     if (curPage === homeIndex()) { closeSheet(); closeOverview(); lastNav = Date.now(); } // only a sheet to close
